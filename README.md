@@ -43,7 +43,7 @@ ctest --test-dir build-cmake --output-on-failure
 ## hyprpm
 
 ```sh
-hyprpm add <repo-url>
+hyprpm add https://github.com/gfhdhytghd/hypr-edgehover
 hyprpm enable hypr-edgehover
 hyprpm update
 ```
