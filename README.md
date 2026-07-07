@@ -21,6 +21,7 @@ plugin {
         layer_namespaces =
         overhang_pass = hover,keyboard
         overhang_threshold = 8
+        overhang_edge_width = 0
         steal_edge_width = 2
         zones_top = 0-100
         zones_bottom = 0-100
@@ -39,8 +40,9 @@ plugin {
 - `layer_pass` (`str`, default `"hover,keyboard"`): forwarded event classes when the stock hit is a layer surface such as a bar.
 - `layer_namespaces` (`str`, default empty): comma-separated layer-surface namespace allow-list for the LAYER scenario. Empty means all namespaces.
 - `overhang_pass` (`str`, default `"hover,keyboard"`): forwarded event classes when the stock hit is a thin overhanging window strip.
-- `overhang_threshold` (`int`, default `8`): visible thickness in pixels at or below which a window is considered an overhang. Thin windows are skipped as forwarding targets and do not block target selection behind them.
-- `steal_edge_width` (`int`, default `2`): physical monitor-edge strip width for LAYER and OVERHANG forwarding. These scenarios only engage when the pointer is within this many pixels of the enabled edge.
+- `overhang_threshold` (`int`, default `8`): visible goal thickness in pixels at or below which a window is considered an overhang. Thin windows are skipped as forwarding targets and do not block target selection behind them.
+- `overhang_edge_width` (`int`, default `0`): optional physical-edge limit for OVERHANG forwarding. `0` engages over the whole exposed overhang strip; values greater than `0` additionally require the pointer to be within that many pixels of the enabled monitor edge.
+- `steal_edge_width` (`int`, default `2`): physical monitor-edge strip width for LAYER forwarding. Layer surfaces only engage when the pointer is within this many pixels of the enabled edge.
 - `zones_top`, `zones_bottom`, `zones_left`, `zones_right` (`str`, default `"0-100"`): comma-separated percent ranges that enable forwarding on each edge. Horizontal edges run left to right; vertical edges run top to bottom. Invalid fragments are ignored, and an empty value matches nothing.
 
 Pass-set values are comma-separated subsets of `hover`, `click`, `scroll`, and `keyboard`. If `hover` is absent, that scenario is disabled entirely. `keyboard` also respects `keyboard_focus`; setting `keyboard` in a pass set does not override the `keyboard_focus` policy.
@@ -55,7 +57,9 @@ Bars do not receive hover feedback, tooltips, or hover styling inside active LAY
 
 With `input:off_window_axis_events = 2` or `3`, OVERHANG scroll forwarding can inherit Hyprland's stock off-window axis motion behavior and emit a motion event clamped relative to the thin overhanging window.
 
-Windows whose visible edge thickness is less than or equal to `overhang_threshold` are treated as overhang strips and are never selected as edge-hover targets, including in the GAP scenario.
+Windows whose visible goal edge thickness is less than or equal to `overhang_threshold` are treated as overhang strips and are never selected as edge-hover targets, including in the GAP scenario.
+
+OVERHANG classification and target selection use Hyprland's goal geometry, so scrolling-layout animations do not repeatedly flip between thin-strip and normal-window behavior. Delivery is still clamped against the current surface geometry before pointer motion is sent.
 
 Click forwarding is implemented without cancelling Hyprland's button events, so press/release pairing and mouse keybind handling stay on the stock path.
 

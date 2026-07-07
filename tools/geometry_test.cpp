@@ -215,13 +215,25 @@ int main() {
             {.index = 1, .box = {20, 100, 500, 300}, .visibleThickness = {.left = 500, .right = 500, .top = 300, .bottom = 300}},
         };
 
-        const auto result = pickTarget(monitor, windows, {1, 200}, {.edges = "l", .inset = 1, .maxDistance = 2, .overhangThreshold = 8});
+        const auto result = pickTarget(monitor, windows, {1, 200}, {.edges = "l", .inset = 1, .maxDistance = 0, .overhangThreshold = 8});
         ok &= expect(result.has_value(), "thin edge windows should not block a non-thin target behind them");
         ok &= expect(result && result->windowIndex == 1, "thin edge windows should not be selected as targets");
         ok &= result ? expectPoint(result->targetPoint, {21, 200}, "non-thin target behind a thin window should clamp normally") : false;
 
-        ok &= expect(!pickTarget(monitor, {windows.front()}, {1, 200}, {.edges = "l", .inset = 1, .maxDistance = 2, .overhangThreshold = 8}).has_value(),
+        ok &= expect(!pickTarget(monitor, {windows.front()}, {1, 200}, {.edges = "l", .inset = 1, .maxDistance = 0, .overhangThreshold = 8}).has_value(),
                      "all-thin candidates should produce no target");
+    }
+
+    {
+        const std::vector<WindowCandidate> windows = {
+            {.index = 0, .box = {0, 100, 8, 300}, .visibleThickness = {.left = 8, .right = 8, .top = 300, .bottom = 300}},
+            {.index = 1, .box = {20, 100, 500, 300}, .visibleThickness = {.left = 500, .right = 500, .top = 300, .bottom = 300}},
+        };
+
+        const auto result = pickTarget(monitor, windows, {6, 200}, {.edges = "l", .inset = 1, .maxDistance = 0, .overhangThreshold = 8});
+        ok &= expect(result.has_value(), "OVERHANG with uncapped maxDistance should trigger from the middle of the exposed strip");
+        ok &= expect(result && result->windowIndex == 1, "OVERHANG middle-strip point should pick the non-thin target");
+        ok &= result ? expectPoint(result->targetPoint, {21, 200}, "OVERHANG middle-strip target should clamp normally") : false;
     }
 
     {

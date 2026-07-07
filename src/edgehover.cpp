@@ -42,6 +42,15 @@ Rect boxToRect(const CBox& box) {
     };
 }
 
+CBox goalBox(PHLWINDOW window) {
+    if (!window)
+        return {0.0, 0.0, 0.0, 0.0};
+
+    const auto position = window->m_realPosition->goal();
+    const auto size     = window->m_realSize->goal();
+    return {position.x, position.y, size.x, size.y};
+}
+
 Rect intersectRects(const Rect& lhs, const Rect& rhs) {
     const double left   = std::max(lhs.left(), rhs.left());
     const double right  = std::min(lhs.right(), rhs.right());
@@ -355,6 +364,7 @@ RuntimeConfig EdgeHover::readConfig() const {
     static const auto PLAYERNAMES    = CConfigValue<std::string>("plugin:hypr_edgehover:layer_namespaces");
     static const auto POVERHANGPASS  = CConfigValue<std::string>("plugin:hypr_edgehover:overhang_pass");
     static const auto POVERHANGTHRESHOLD = CConfigValue<Config::INTEGER>("plugin:hypr_edgehover:overhang_threshold");
+    static const auto POVERHANGEDGEWIDTH = CConfigValue<Config::INTEGER>("plugin:hypr_edgehover:overhang_edge_width");
     static const auto PSTEALEDGEWIDTH    = CConfigValue<Config::INTEGER>("plugin:hypr_edgehover:steal_edge_width");
     static const auto PZONESTOP          = CConfigValue<std::string>("plugin:hypr_edgehover:zones_top");
     static const auto PZONESBOTTOM       = CConfigValue<std::string>("plugin:hypr_edgehover:zones_bottom");
@@ -374,6 +384,7 @@ RuntimeConfig EdgeHover::readConfig() const {
         .layerNamespaces = cachedStringList(*PLAYERNAMES, false, m_layerNamespacesCache),
         .overhangPass = cachedPassSet(*POVERHANGPASS, m_overhangPassCache),
         .overhangThreshold = static_cast<double>(std::max<Config::INTEGER>(0, *POVERHANGTHRESHOLD)),
+        .overhangEdgeWidth = static_cast<double>(std::max<Config::INTEGER>(0, *POVERHANGEDGEWIDTH)),
         .stealEdgeWidth = static_cast<double>(std::max<Config::INTEGER>(0, *PSTEALEDGEWIDTH)),
         .zones = {
             .left = cachedZones(*PZONESLEFT, m_zonesLeftCache),
@@ -403,6 +414,12 @@ bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetP
     if (!window || !g_pCompositor || !g_pSeatManager || !g_pInputManager)
         return false;
 
+    const Rect valueBox = boxToRect(window->getWindowMainSurfaceBox());
+    if (valueBox.width <= 0.0 || valueBox.height <= 0.0)
+        return false;
+
+    const Vector2D clampedTargetPoint = pointToVector(clampPointToRectWithInset(vectorToPoint(targetPoint), valueBox, config.inset));
+
     Vector2D                 surfaceLocal;
     SP<CWLSurfaceResource>   surface;
 
@@ -412,9 +429,9 @@ bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetP
             return false;
 
         surface      = windowSurface->resource();
-        surfaceLocal = (targetPoint - window->m_realPosition->value()) * window->m_X11SurfaceScaledBy;
+        surfaceLocal = (clampedTargetPoint - window->m_realPosition->value()) * window->m_X11SurfaceScaledBy;
     } else {
-        surface = g_pCompositor->vectorWindowToSurface(targetPoint, window, surfaceLocal);
+        surface = g_pCompositor->vectorWindowToSurface(clampedTargetPoint, window, surfaceLocal);
 
         if (!surface) {
             const auto windowSurface = window->wlSurface();
@@ -422,7 +439,7 @@ bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetP
                 return false;
 
             surface      = windowSurface->resource();
-            surfaceLocal = targetPoint - window->m_realPosition->value();
+            surfaceLocal = clampedTargetPoint - window->m_realPosition->value();
         }
     }
 
@@ -552,19 +569,19 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
     } else if (hitWindow) {
         const PassSet overhangPass = passForSource(config, SyntheticSource::Overhang);
         const auto    edgeHit      = nearestEnabledEdge(monitorRect, cursorPoint, geometryConfig);
-        if (!overhangPass.hover || !edgeHit || edgeHit->distance > config.stealEdgeWidth) {
+        if (!overhangPass.hover || !edgeHit || (config.overhangEdgeWidth > 0.0 && edgeHit->distance > config.overhangEdgeWidth)) {
             clearSynthetic();
             return;
         }
 
-        const Rect hitBox = boxToRect(hitWindow->getWindowMainSurfaceBox());
+        const Rect hitBox = boxToRect(goalBox(hitWindow));
         if (visibleThicknessForEdge(visibleThicknessInMonitor(monitorRect, hitBox), edgeHit->edge) > config.overhangThreshold) {
             clearSynthetic();
             return;
         }
 
         source                     = SyntheticSource::Overhang;
-        geometryConfig.maxDistance = config.stealEdgeWidth;
+        geometryConfig.maxDistance = config.overhangEdgeWidth > 0.0 ? config.overhangEdgeWidth : 0.0;
     } else if (!passForSource(config, SyntheticSource::Gap).hover) {
         clearSynthetic();
         return;
@@ -580,7 +597,7 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
         if (source == SyntheticSource::Overhang && window == hitWindow)
             continue;
 
-        const auto box = window->getWindowMainSurfaceBox();
+        const auto box = goalBox(window);
         if (box.width <= 0.0 || box.height <= 0.0)
             continue;
 

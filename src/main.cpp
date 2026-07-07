@@ -56,6 +56,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     STRING_CONF("layer_namespaces", "");
     STRING_CONF("overhang_pass", "hover,keyboard");
     INT_CONF("overhang_threshold", 8);
+    INT_CONF("overhang_edge_width", 0);
     INT_CONF("steal_edge_width", 2);
     STRING_CONF("zones_top", "0-100");
     STRING_CONF("zones_bottom", "0-100");

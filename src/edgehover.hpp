@@ -38,6 +38,7 @@ struct RuntimeConfig {
     std::vector<std::string> layerNamespaces;
     PassSet                  overhangPass      = {.hover = true, .keyboard = true};
     double                   overhangThreshold = 8.0;
+    double                   overhangEdgeWidth = 0.0;
     double                   stealEdgeWidth    = 2.0;
     EdgeZones                zones;
 };
