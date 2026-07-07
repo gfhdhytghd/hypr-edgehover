@@ -147,7 +147,10 @@ std::optional<WindowCandidate> chooseWindow(const Rect& monitor, const std::vect
         if (window.box.width <= 0.0 || window.box.height <= 0.0)
             continue;
 
-        const double normalDistance = std::max(0.0, nearEdgeDistance(monitor, window.box, edge));
+        const double normalDistance = nearEdgeDistance(monitor, window.box, edge);
+        if (normalDistance < 0.0)
+            continue;
+
         scored.push_back({
             .window = window,
             .overlapsParallel = parallelOverlaps(window.box, coords, edge),
@@ -197,7 +200,7 @@ std::optional<PickResult> pickTarget(const Rect& monitor, const std::vector<Wind
         return std::nullopt;
 
     const double triggerWidth = nearEdgeDistance(monitor, selectedWindow->box, selectedEdge->edge);
-    if (selectedEdge->distance > std::max(0.0, triggerWidth))
+    if (triggerWidth < 0.0 || selectedEdge->distance > triggerWidth)
         return std::nullopt;
 
     return PickResult{

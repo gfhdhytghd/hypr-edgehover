@@ -12,6 +12,7 @@ struct RuntimeConfig {
     double      inset         = 1.0;
     double      maxDistance   = 0.0;
     long        keyboardFocus = -1;
+    long        followMouse   = 0;
 };
 
 class EdgeHover {

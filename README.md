@@ -28,6 +28,10 @@ plugin {
 
 Keyboard focus changes respect the target window's `no_follow_mouse` rule and only run when the focused window changes.
 
+## Known Limitations
+
+Hyprland skips its mouse-move path when the floored cursor coordinates are unchanged. If focus state changes while the cursor remains on the exact same floored edge-gap coordinate, edge-hover delivery may not refresh until the cursor moves to a different floored coordinate.
+
 ## Build
 
 ```sh

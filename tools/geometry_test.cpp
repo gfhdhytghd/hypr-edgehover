@@ -101,6 +101,29 @@ int main() {
     }
 
     {
+        ok &= expect(!pickTarget(monitor, {{.index = 0, .box = {-20, 30, 960, 740}}}, {0, 400}, {.edges = "l", .inset = 1, .maxDistance = 0}).has_value(),
+                     "left edge should reject windows extending past the monitor edge");
+        ok &= expect(!pickTarget(monitor, {{.index = 0, .box = {20, 30, 1000, 740}}}, {999, 400}, {.edges = "r", .inset = 1, .maxDistance = 0}).has_value(),
+                     "right edge should reject windows extending past the monitor edge");
+        ok &= expect(!pickTarget(monitor, {{.index = 0, .box = {20, -30, 960, 740}}}, {500, 0}, {.edges = "t", .inset = 1, .maxDistance = 0}).has_value(),
+                     "top edge should reject windows extending past the monitor edge");
+        ok &= expect(!pickTarget(monitor, {{.index = 0, .box = {20, 30, 960, 800}}}, {500, 799}, {.edges = "b", .inset = 1, .maxDistance = 0}).has_value(),
+                     "bottom edge should reject windows extending past the monitor edge");
+    }
+
+    {
+        const std::vector<WindowCandidate> windows = {
+            {.index = 0, .box = {-10, 100, 400, 200}},
+            {.index = 1, .box = {20, 300, 400, 200}},
+        };
+
+        const auto result = pickTarget(monitor, windows, {0, 350}, {.edges = "l", .inset = 1, .maxDistance = 0});
+        ok &= expect(result.has_value(), "wrong-side left candidate should not block valid candidates");
+        ok &= expect(result && result->windowIndex == 1, "left edge should pick the valid candidate after rejecting the wrong-side one");
+        ok &= result ? expectPoint(result->targetPoint, {21, 350}, "valid candidate target should clamp normally") : false;
+    }
+
+    {
         const std::vector<WindowCandidate> windows = {
             {.index = 0, .box = {20, 100, 400, 200}},
             {.index = 1, .box = {20, 500, 400, 200}},

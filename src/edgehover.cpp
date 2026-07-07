@@ -3,13 +3,14 @@
 #include "geometry.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <string>
-#include <typeinfo>
 #include <vector>
 
 #include <hyprland/protocols/wlr-layer-shell-unstable-v1.hpp>
 #include <hyprland/src/Compositor.hpp>
+#include <hyprland/src/config/ConfigValue.hpp>
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/rule/windowRule/WindowRuleApplicator.hpp>
@@ -26,42 +27,6 @@
 namespace hypr_edgehover {
 
 namespace {
-
-long getConfigInt(const char* name, long fallback) {
-    if (!Config::mgr())
-        return fallback;
-
-    const auto value = Config::mgr()->getConfigValue(name);
-    if (!value.dataptr || !value.type)
-        return fallback;
-
-    if (*value.type == typeid(bool))
-        return **reinterpret_cast<bool* const*>(value.dataptr) ? 1L : 0L;
-
-    if (*value.type == typeid(Config::INTEGER))
-        return static_cast<long>(**reinterpret_cast<Config::INTEGER* const*>(value.dataptr));
-
-    return fallback;
-}
-
-std::string getConfigString(const char* name, const std::string& fallback) {
-    if (!Config::mgr())
-        return fallback;
-
-    const auto value = Config::mgr()->getConfigValue(name);
-    if (!value.dataptr || !value.type)
-        return fallback;
-
-    if (*value.type == typeid(Config::STRING))
-        return **reinterpret_cast<Config::STRING* const*>(value.dataptr);
-
-    if (*value.type == typeid(Hyprlang::STRING)) {
-        const auto* data = reinterpret_cast<Hyprlang::STRING const*>(value.dataptr);
-        return data && *data ? std::string(*data) : fallback;
-    }
-
-    return fallback;
-}
 
 Rect boxToRect(const CBox& box) {
     return {
@@ -80,15 +45,19 @@ Vector2D pointToVector(const Point& point) {
     return {point.x, point.y};
 }
 
-bool workspaceHasFullscreen(PHLWORKSPACE workspace) {
-    return workspace && workspace->getFullscreenWindow();
+PHLWORKSPACE selectedWorkspace(PHLMONITOR monitor) {
+    if (!monitor)
+        return nullptr;
+
+    return monitor->m_activeSpecialWorkspace ? monitor->m_activeSpecialWorkspace : monitor->m_activeWorkspace;
 }
 
 bool currentWorkspaceHasFullscreen(PHLMONITOR monitor) {
     if (!monitor)
         return false;
 
-    return workspaceHasFullscreen(monitor->m_activeWorkspace) || workspaceHasFullscreen(monitor->m_activeSpecialWorkspace);
+    const auto workspace = selectedWorkspace(monitor);
+    return monitor->inFullscreenMode() || (workspace && workspace->getFullscreenWindow());
 }
 
 bool windowBelongsToActiveWorkspace(PHLWINDOW window, PHLMONITOR monitor) {
@@ -96,6 +65,18 @@ bool windowBelongsToActiveWorkspace(PHLWINDOW window, PHLMONITOR monitor) {
         return false;
 
     return window->m_workspace == monitor->m_activeWorkspace || (monitor->m_activeSpecialWorkspace && window->m_workspace == monitor->m_activeSpecialWorkspace);
+}
+
+bool noFocus(PHLWINDOW window) {
+    return window && window->m_ruleApplicator && window->m_ruleApplicator->noFocus().valueOrDefault();
+}
+
+bool noFollowMouse(PHLWINDOW window) {
+    return window && window->m_ruleApplicator && window->m_ruleApplicator->noFollowMouse().valueOrDefault();
+}
+
+bool confinePointer(PHLWINDOW window) {
+    return window && window->m_ruleApplicator && window->m_ruleApplicator->confinePointer().valueOrDefault();
 }
 
 bool stockWindowHit(const Vector2D& coords) {
@@ -128,8 +109,34 @@ bool stockLayerHit(const Vector2D& coords, PHLMONITOR monitor) {
     return false;
 }
 
-bool noFollowMouse(PHLWINDOW window) {
-    return window && window->m_ruleApplicator && window->m_ruleApplicator->noFollowMouse().valueOrDefault();
+bool forcedFocusActive() {
+    PHLWINDOW forcedFocus;
+
+    if (g_pInputManager)
+        forcedFocus = g_pInputManager->m_forcedFocus.lock();
+    if (!forcedFocus && g_pCompositor)
+        forcedFocus = g_pCompositor->getForceFocus();
+
+    return static_cast<bool>(forcedFocus);
+}
+
+bool focusedWindowConfinesPointer() {
+    if (!Desktop::focusState())
+        return false;
+
+    PHLWINDOW window;
+
+    const auto focusedSurface = Desktop::focusState()->surface();
+    if (focusedSurface) {
+        const auto hlSurface = Desktop::View::CWLSurface::fromResource(focusedSurface);
+        if (hlSurface)
+            window = Desktop::View::CWindow::fromView(hlSurface->view());
+    }
+
+    if (!window)
+        window = Desktop::focusState()->window();
+
+    return confinePointer(window);
 }
 
 bool shouldFocusKeyboard(const RuntimeConfig& config, PHLWINDOW window) {
@@ -144,7 +151,7 @@ bool shouldFocusKeyboard(const RuntimeConfig& config, PHLWINDOW window) {
     if (config.keyboardFocus > 0)
         return true;
 
-    return getConfigInt("input:follow_mouse", 0) == 1;
+    return config.followMouse == 1;
 }
 
 } // namespace
@@ -162,12 +169,20 @@ bool EdgeHover::initialize() {
 RuntimeConfig EdgeHover::readConfig() const {
     (void)m_handle;
 
+    static const auto PENABLED       = CConfigValue<Config::INTEGER>("plugin:hypr_edgehover:enabled");
+    static const auto PEDGES         = CConfigValue<std::string>("plugin:hypr_edgehover:edges");
+    static const auto PINSET         = CConfigValue<Config::INTEGER>("plugin:hypr_edgehover:inset");
+    static const auto PMAXDISTANCE   = CConfigValue<Config::INTEGER>("plugin:hypr_edgehover:max_distance");
+    static const auto PKEYBOARDFOCUS = CConfigValue<Config::INTEGER>("plugin:hypr_edgehover:keyboard_focus");
+    static const auto PFOLLOWMOUSE   = CConfigValue<Config::INTEGER>("input:follow_mouse");
+
     return {
-        .enabled = getConfigInt("plugin:hypr_edgehover:enabled", 1) != 0,
-        .edges = getConfigString("plugin:hypr_edgehover:edges", "lrtb"),
-        .inset = static_cast<double>(std::max(0L, getConfigInt("plugin:hypr_edgehover:inset", 1))),
-        .maxDistance = static_cast<double>(std::max(0L, getConfigInt("plugin:hypr_edgehover:max_distance", 0))),
-        .keyboardFocus = getConfigInt("plugin:hypr_edgehover:keyboard_focus", -1),
+        .enabled = *PENABLED != 0,
+        .edges = *PEDGES,
+        .inset = static_cast<double>(std::max<Config::INTEGER>(0, *PINSET)),
+        .maxDistance = static_cast<double>(std::max<Config::INTEGER>(0, *PMAXDISTANCE)),
+        .keyboardFocus = *PKEYBOARDFOCUS,
+        .followMouse = *PFOLLOWMOUSE,
     };
 }
 
@@ -186,6 +201,12 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
     if (g_pSessionLockManager->isSessionLocked() || g_pInputManager->isConstrained() || g_pSeatManager->m_seatGrab || g_layoutManager->dragController()->target())
         return;
 
+    if (!g_pInputManager->m_exclusiveLSes.empty() || g_pInputManager->hasHeldButtons() || focusedWindowConfinesPointer() || forcedFocusActive())
+        return;
+
+    if (g_pInputManager->m_relay.popupFromCoords(coords))
+        return;
+
     if (currentWorkspaceHasFullscreen(monitor))
         return;
 
@@ -198,7 +219,8 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
     const GeometryConfig           geometryConfig = {.edges = config.edges, .inset = config.inset, .maxDistance = config.maxDistance};
 
     for (const auto& window : g_pCompositor->m_windows) {
-        if (!window || !window->m_isMapped || window->isHidden() || !windowBelongsToActiveWorkspace(window, monitor))
+        if (!window || !window->m_isMapped || window->isHidden() || window->m_monitor != monitor || !windowBelongsToActiveWorkspace(window, monitor) || !window->acceptsInput() ||
+            window->m_X11ShouldntFocus || noFocus(window))
             continue;
 
         const auto box = window->getWindowMainSurfaceBox();
@@ -218,25 +240,37 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
     if (!window)
         return;
 
+    if (config.followMouse == 0 && config.keyboardFocus != 1 && Desktop::focusState() && window != Desktop::focusState()->window())
+        return;
+
     const Vector2D targetPoint = pointToVector(picked->targetPoint);
     Vector2D       surfaceLocal;
-    auto           surface = g_pCompositor->vectorWindowToSurface(targetPoint, window, surfaceLocal);
+    SP<CWLSurfaceResource> surface;
 
-    if (!surface) {
+    if (window->m_isX11) {
         const auto windowSurface = window->wlSurface();
         if (!windowSurface)
             return;
 
         surface      = windowSurface->resource();
-        surfaceLocal = targetPoint - window->m_realPosition->value();
+        surfaceLocal = (targetPoint - window->m_realPosition->value()) * window->m_X11SurfaceScaledBy;
+    } else {
+        surface = g_pCompositor->vectorWindowToSurface(targetPoint, window, surfaceLocal);
+
+        if (!surface) {
+            const auto windowSurface = window->wlSurface();
+            if (!windowSurface)
+                return;
+
+            surface      = windowSurface->resource();
+            surfaceLocal = targetPoint - window->m_realPosition->value();
+        }
     }
 
     if (!surface)
         return;
 
-    if (window->m_isX11)
-        surfaceLocal = surfaceLocal * window->m_X11SurfaceScaledBy;
-
+    g_pInputManager->m_emptyFocusCursorSet = false;
     g_pSeatManager->setPointerFocus(surface, surfaceLocal);
     g_pSeatManager->sendPointerMotion(Time::millis(Time::steadyNow()), surfaceLocal);
 
