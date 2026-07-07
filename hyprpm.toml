@@ -1,0 +1,12 @@
+[repository]
+name = "hypr-edgehover"
+authors = ["wilf"]
+
+[hypr-edgehover]
+description = "Forward edge-gap pointer motion to adjacent Hyprland windows"
+authors = ["wilf"]
+output = "build-cmake/libhypr-edgehover.so"
+build = [
+  "cmake -DCMAKE_BUILD_TYPE=Release -B build-cmake",
+  "cmake --build build-cmake -j $(nproc)"
+]
