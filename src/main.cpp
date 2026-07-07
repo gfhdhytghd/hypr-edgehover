@@ -51,6 +51,16 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     INT_CONF("inset", 1);
     INT_CONF("max_distance", 0);
     INT_CONF("keyboard_focus", -1);
+    STRING_CONF("gap_pass", "hover,click,scroll,keyboard");
+    STRING_CONF("layer_pass", "hover,keyboard");
+    STRING_CONF("layer_namespaces", "");
+    STRING_CONF("overhang_pass", "hover,keyboard");
+    INT_CONF("overhang_threshold", 8);
+    INT_CONF("steal_edge_width", 2);
+    STRING_CONF("zones_top", "0-100");
+    STRING_CONF("zones_bottom", "0-100");
+    STRING_CONF("zones_left", "0-100");
+    STRING_CONF("zones_right", "0-100");
 #undef STRING_CONF
 #undef INT_CONF
 

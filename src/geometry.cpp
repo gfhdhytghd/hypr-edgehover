@@ -3,8 +3,12 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cerrno>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
+#include <string>
+#include <string_view>
 
 namespace hypr_edgehover {
 
@@ -44,6 +48,29 @@ struct EdgeOption {
     bool   enabled;
 };
 
+std::string trim(std::string_view value) {
+    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front())))
+        value.remove_prefix(1);
+    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back())))
+        value.remove_suffix(1);
+    return std::string(value);
+}
+
+bool parseDouble(std::string_view value, double& output) {
+    const std::string text = trim(value);
+    if (text.empty())
+        return false;
+
+    char* end = nullptr;
+    errno     = 0;
+    const double parsed = std::strtod(text.c_str(), &end);
+    if (errno == ERANGE || !end || end != text.c_str() + text.size() || !std::isfinite(parsed))
+        return false;
+
+    output = parsed;
+    return true;
+}
+
 bool edgeEnabled(const std::string& edges, Edge edge) {
     const char needle = [edge] {
         switch (edge) {
@@ -58,6 +85,32 @@ bool edgeEnabled(const std::string& edges, Edge edge) {
     return std::ranges::any_of(edges, [needle](unsigned char c) { return static_cast<char>(std::tolower(c)) == needle; });
 }
 
+const ZoneRanges& zonesForEdge(const EdgeZones& zones, Edge edge) {
+    switch (edge) {
+        case Edge::Left: return zones.left;
+        case Edge::Right: return zones.right;
+        case Edge::Top: return zones.top;
+        case Edge::Bottom: return zones.bottom;
+    }
+    return zones.left;
+}
+
+double edgePercent(const Rect& monitor, const Point& coords, Edge edge) {
+    switch (edge) {
+        case Edge::Left:
+        case Edge::Right:
+            if (monitor.height <= 0.0)
+                return std::numeric_limits<double>::quiet_NaN();
+            return ((coords.y - monitor.top()) / monitor.height) * 100.0;
+        case Edge::Top:
+        case Edge::Bottom:
+            if (monitor.width <= 0.0)
+                return std::numeric_limits<double>::quiet_NaN();
+            return ((coords.x - monitor.left()) / monitor.width) * 100.0;
+    }
+    return std::numeric_limits<double>::quiet_NaN();
+}
+
 double nearEdgeDistance(const Rect& monitor, const Rect& window, Edge edge) {
     switch (edge) {
         case Edge::Left: return window.left() - monitor.left();
@@ -66,6 +119,20 @@ double nearEdgeDistance(const Rect& monitor, const Rect& window, Edge edge) {
         case Edge::Bottom: return monitor.bottom() - window.bottom();
     }
     return std::numeric_limits<double>::infinity();
+}
+
+double visibleThicknessForEdge(const WindowCandidate& window, Edge edge) {
+    switch (edge) {
+        case Edge::Left: return window.visibleThickness.left;
+        case Edge::Right: return window.visibleThickness.right;
+        case Edge::Top: return window.visibleThickness.top;
+        case Edge::Bottom: return window.visibleThickness.bottom;
+    }
+    return std::numeric_limits<double>::infinity();
+}
+
+bool isThinForEdge(const WindowCandidate& window, Edge edge, double threshold) {
+    return visibleThicknessForEdge(window, edge) <= std::max(0.0, threshold);
 }
 
 bool parallelOverlaps(const Rect& window, const Point& coords, Edge edge) {
@@ -113,7 +180,7 @@ Point clampWithInset(const Point& coords, const Rect& box, double inset) {
     };
 }
 
-std::optional<EdgeOption> nearestEnabledEdge(const Rect& monitor, const Point& coords, const GeometryConfig& config) {
+std::optional<EdgeOption> nearestEnabledEdgeOption(const Rect& monitor, const Point& coords, const GeometryConfig& config) {
     const std::array<EdgeOption, 4> options = {{
         {.edge = Edge::Left, .distance = coords.x - monitor.left(), .enabled = edgeEnabled(config.edges, Edge::Left)},
         {.edge = Edge::Right, .distance = monitor.right() - coords.x, .enabled = edgeEnabled(config.edges, Edge::Right)},
@@ -125,6 +192,8 @@ std::optional<EdgeOption> nearestEnabledEdge(const Rect& monitor, const Point& c
     for (const auto& option : options) {
         if (!option.enabled || option.distance < 0.0)
             continue;
+        if (!edgeZoneMatches(monitor, coords, option.edge, config.zones))
+            continue;
         if (!best || option.distance < best->distance)
             best = option;
     }
@@ -132,7 +201,7 @@ std::optional<EdgeOption> nearestEnabledEdge(const Rect& monitor, const Point& c
     return best;
 }
 
-std::optional<WindowCandidate> chooseWindow(const Rect& monitor, const std::vector<WindowCandidate>& windows, const Point& coords, Edge edge) {
+std::optional<WindowCandidate> chooseWindow(const Rect& monitor, const std::vector<WindowCandidate>& windows, const Point& coords, Edge edge, double overhangThreshold) {
     struct ScoredWindow {
         WindowCandidate window;
         bool            overlapsParallel = false;
@@ -145,6 +214,8 @@ std::optional<WindowCandidate> chooseWindow(const Rect& monitor, const std::vect
 
     for (const auto& window : windows) {
         if (window.box.width <= 0.0 || window.box.height <= 0.0)
+            continue;
+        if (isThinForEdge(window, edge, overhangThreshold))
             continue;
 
         const double normalDistance = nearEdgeDistance(monitor, window.box, edge);
@@ -184,18 +255,66 @@ std::optional<WindowCandidate> chooseWindow(const Rect& monitor, const std::vect
 
 } // namespace
 
+ZoneRanges parseZones(std::string_view spec) {
+    ZoneRanges zones;
+
+    std::size_t start = 0;
+    while (start <= spec.size()) {
+        const std::size_t comma = spec.find(',', start);
+        const auto        part  = spec.substr(start, comma == std::string_view::npos ? std::string_view::npos : comma - start);
+        const std::string text  = trim(part);
+
+        if (!text.empty()) {
+            const std::size_t dash = text.find('-');
+            if (dash != std::string::npos && text.find('-', dash + 1) == std::string::npos) {
+                double rangeStart = 0.0;
+                double rangeEnd   = 0.0;
+                if (parseDouble(std::string_view{text}.substr(0, dash), rangeStart) && parseDouble(std::string_view{text}.substr(dash + 1), rangeEnd) &&
+                    rangeStart >= 0.0 && rangeEnd <= 100.0 && rangeStart <= rangeEnd) {
+                    zones.push_back({.start = rangeStart, .end = rangeEnd});
+                }
+            }
+        }
+
+        if (comma == std::string_view::npos)
+            break;
+        start = comma + 1;
+    }
+
+    return zones;
+}
+
+bool zoneContains(const ZoneRanges& zones, double percent) {
+    if (!std::isfinite(percent))
+        return false;
+
+    return std::ranges::any_of(zones, [percent](const ZoneRange& zone) { return percent >= zone.start && percent <= zone.end; });
+}
+
+bool edgeZoneMatches(const Rect& monitor, const Point& coords, Edge edge, const EdgeZones& zones) {
+    return zoneContains(zonesForEdge(zones, edge), edgePercent(monitor, coords, edge));
+}
+
+std::optional<EdgeHit> nearestEnabledEdge(const Rect& monitor, const Point& coords, const GeometryConfig& config) {
+    const auto selected = nearestEnabledEdgeOption(monitor, coords, config);
+    if (!selected)
+        return std::nullopt;
+
+    return EdgeHit{.edge = selected->edge, .distance = selected->distance};
+}
+
 std::optional<PickResult> pickTarget(const Rect& monitor, const std::vector<WindowCandidate>& windows, const Point& coords, const GeometryConfig& config) {
     if (monitor.width <= 0.0 || monitor.height <= 0.0 || windows.empty() || !monitor.contains(coords))
         return std::nullopt;
 
-    const auto selectedEdge = nearestEnabledEdge(monitor, coords, config);
+    const auto selectedEdge = nearestEnabledEdgeOption(monitor, coords, config);
     if (!selectedEdge)
         return std::nullopt;
 
     if (config.maxDistance > 0.0 && selectedEdge->distance > config.maxDistance)
         return std::nullopt;
 
-    const auto selectedWindow = chooseWindow(monitor, windows, coords, selectedEdge->edge);
+    const auto selectedWindow = chooseWindow(monitor, windows, coords, selectedEdge->edge, config.overhangThreshold);
     if (!selectedWindow)
         return std::nullopt;
 

@@ -8,11 +8,15 @@
 namespace {
 
 using hypr_edgehover::Edge;
+using hypr_edgehover::EdgeZones;
 using hypr_edgehover::GeometryConfig;
 using hypr_edgehover::Point;
 using hypr_edgehover::Rect;
 using hypr_edgehover::WindowCandidate;
+using hypr_edgehover::edgeZoneMatches;
 using hypr_edgehover::pickTarget;
+using hypr_edgehover::parseZones;
+using hypr_edgehover::zoneContains;
 
 bool expect(bool condition, const char* message) {
     if (condition)
@@ -143,6 +147,106 @@ int main() {
         const auto result = pickTarget(monitor, tinyWindow, {0, 35}, {.edges = "l", .inset = 7, .maxDistance = 0});
         ok &= expect(result.has_value(), "tiny window should still trigger");
         ok &= result ? expectPoint(result->targetPoint, {25, 35}, "oversized inset should clamp to the window center on that axis") : false;
+    }
+
+    {
+        const auto splitZones = parseZones("0-40,60-100");
+        ok &= expect(splitZones.size() == 2, "split zones should parse two valid ranges");
+        ok &= expect(zoneContains(splitZones, 0) && zoneContains(splitZones, 40), "split zones should include the first range endpoints");
+        ok &= expect(zoneContains(splitZones, 60) && zoneContains(splitZones, 100), "split zones should include the second range endpoints");
+        ok &= expect(!zoneContains(splitZones, 50), "split zones should reject the middle gap");
+
+        const auto outOfOrder = parseZones("80-100,0-20");
+        ok &= expect(zoneContains(outOfOrder, 10) && zoneContains(outOfOrder, 90), "out-of-order zones should match independently of list order");
+        ok &= expect(!zoneContains(outOfOrder, 50), "out-of-order zones should still reject missing ranges");
+
+        const auto invalidMixed = parseZones("0-20,120-130,-5-5,bad,40-30,80-100");
+        ok &= expect(invalidMixed.size() == 2, "invalid and out-of-range zone fragments should be ignored");
+        ok &= expect(zoneContains(invalidMixed, 10) && zoneContains(invalidMixed, 90), "valid fragments should survive invalid zone fragments");
+
+        const auto emptyZones = parseZones("");
+        ok &= expect(emptyZones.empty(), "empty zone config should parse as no ranges");
+        ok &= expect(!zoneContains(emptyZones, 0), "empty zones should match nothing");
+    }
+
+    {
+        EdgeZones zones;
+        zones.left  = parseZones("0-50");
+        zones.right = parseZones("");
+        zones.top   = parseZones("0-40,60-100");
+
+        ok &= expect(edgeZoneMatches(monitor, {350, 0}, Edge::Top, zones), "top zone should match the first enabled percent range");
+        ok &= expect(!edgeZoneMatches(monitor, {500, 0}, Edge::Top, zones), "top zone should reject the disabled middle percent range");
+        ok &= expect(edgeZoneMatches(monitor, {900, 0}, Edge::Top, zones), "top zone should match the second enabled percent range");
+        ok &= expect(edgeZoneMatches(monitor, {0, 200}, Edge::Left, zones), "left zone should match vertical edge percent");
+        ok &= expect(!edgeZoneMatches(monitor, {0, 600}, Edge::Left, zones), "left zone should reject vertical edge percent outside its range");
+        ok &= expect(!edgeZoneMatches(monitor, {999, 200}, Edge::Right, zones), "empty right zone should match nothing");
+    }
+
+    {
+        EdgeZones zones;
+        zones.top = parseZones("0-40,60-100");
+
+        const GeometryConfig config{.edges = "t", .inset = 1, .maxDistance = 0, .overhangThreshold = 8, .zones = zones};
+        ok &= expect(pickTarget(monitor, singleWindow, {350, 0}, config).has_value(), "pickTarget should allow points inside edge zones");
+        ok &= expect(!pickTarget(monitor, singleWindow, {500, 0}, config).has_value(), "pickTarget should reject points outside edge zones");
+
+        zones.left = parseZones("");
+        const GeometryConfig fallbackConfig{.edges = "lt", .inset = 1, .maxDistance = 0, .overhangThreshold = 8, .zones = zones};
+        const auto           fallback = pickTarget(monitor, singleWindow, {0, 30}, fallbackConfig);
+        ok &= expect(fallback.has_value(), "zone rejection on the nearest enabled edge should fall back to a farther matching edge");
+        ok &= expect(fallback && fallback->edge == Edge::Top, "fallback edge should be the farther top edge");
+    }
+
+    {
+        EdgeZones zones;
+        zones.left = parseZones("");
+        zones.top  = parseZones("0-100");
+
+        const GeometryConfig cornerFallbackConfig{.edges = "lt", .inset = 1, .maxDistance = 0, .overhangThreshold = 8, .zones = zones};
+        const auto           cornerFallback = pickTarget(monitor, singleWindow, {0, 0}, cornerFallbackConfig);
+        ok &= expect(cornerFallback.has_value(), "corner point should fall back from a rejected tie edge to a matching edge");
+        ok &= expect(cornerFallback && cornerFallback->edge == Edge::Top, "corner fallback should keep l-r-t-b tie order after rejected edges");
+    }
+
+    {
+        const std::vector<WindowCandidate> windows = {
+            {.index = 0, .box = {0, 100, 4, 300}, .visibleThickness = {.left = 4, .right = 4, .top = 300, .bottom = 300}},
+            {.index = 1, .box = {20, 100, 500, 300}, .visibleThickness = {.left = 500, .right = 500, .top = 300, .bottom = 300}},
+        };
+
+        const auto result = pickTarget(monitor, windows, {1, 200}, {.edges = "l", .inset = 1, .maxDistance = 2, .overhangThreshold = 8});
+        ok &= expect(result.has_value(), "thin edge windows should not block a non-thin target behind them");
+        ok &= expect(result && result->windowIndex == 1, "thin edge windows should not be selected as targets");
+        ok &= result ? expectPoint(result->targetPoint, {21, 200}, "non-thin target behind a thin window should clamp normally") : false;
+
+        ok &= expect(!pickTarget(monitor, {windows.front()}, {1, 200}, {.edges = "l", .inset = 1, .maxDistance = 2, .overhangThreshold = 8}).has_value(),
+                     "all-thin candidates should produce no target");
+    }
+
+    {
+        const std::vector<WindowCandidate> gapThresholdTarget = {
+            {.index = 0, .box = {20, 100, 9, 300}, .visibleThickness = {.left = 9, .right = 9, .top = 300, .bottom = 300}},
+        };
+
+        const auto result = pickTarget(monitor, gapThresholdTarget, {0, 200}, {.edges = "l", .inset = 1, .maxDistance = 0, .overhangThreshold = 8});
+        ok &= expect(result.has_value(), "GAP target just above overhang_threshold should remain selectable");
+        ok &= expect(result && result->windowIndex == 0, "GAP threshold-boundary target should be selected");
+        ok &= result ? expectPoint(result->targetPoint, {21, 200}, "GAP threshold-boundary target should clamp normally") : false;
+    }
+
+    {
+        const std::vector<WindowCandidate> reservedAreaTarget = {
+            {.index = 0, .box = {30, 50, 900, 700}},
+        };
+        const GeometryConfig stealConfig{.edges = "l", .inset = 1, .maxDistance = 2, .overhangThreshold = 8};
+
+        const auto allowed = pickTarget(monitor, reservedAreaTarget, {2, 400}, stealConfig);
+        ok &= expect(allowed.has_value(), "steal_edge_width should allow points inside the configured physical-edge strip");
+        ok &= allowed ? expectPoint(allowed->targetPoint, {31, 400}, "bar-edge target should be reachable across the reserved area") : false;
+
+        const auto rejected = pickTarget(monitor, reservedAreaTarget, {3, 400}, stealConfig);
+        ok &= expect(!rejected.has_value(), "steal_edge_width should reject points outside the configured physical-edge strip");
     }
 
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
