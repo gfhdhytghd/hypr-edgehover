@@ -1,10 +1,14 @@
 # hypr-edgehover
-
+## hover on the window, with mouse outside
 `hypr-edgehover` is a Hyprland plugin for edge hover forwarding. When the pointer is in an outer monitor gap, on the physical edge over a layer-surface bar, or on a thin overhanging window strip, the plugin keeps the real cursor position unchanged but delivers pointer enter/motion to the adjacent target window as if the pointer were clamped just inside that window edge. Button, axis, and keyboard focus forwarding are configurable per scenario.
 
 The plugin uses Hyprland's cancellable `input.mouse.move` event bus listener. It does not install function hooks and it does not call `refocus(overridePos)`.
 
 ## demo
+
+
+https://github.com/user-attachments/assets/40aa2ccf-4c51-4f4d-948a-f94ff19ae562
+
 
 ## Configuration
 
