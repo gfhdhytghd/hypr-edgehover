@@ -4,6 +4,8 @@
 
 The plugin uses Hyprland's cancellable `input.mouse.move` event bus listener. It does not install function hooks and it does not call `refocus(overridePos)`.
 
+## demo
+
 ## Configuration
 
 All options live under `plugin:hypr_edgehover:`.
