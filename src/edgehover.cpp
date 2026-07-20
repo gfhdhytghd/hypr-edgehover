@@ -19,10 +19,15 @@
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/rule/windowRule/WindowRuleApplicator.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
+#include <hyprland/src/desktop/state/ViewState.hpp>
+#include <hyprland/src/desktop/state/WindowState.hpp>
+#include <hyprland/src/desktop/state/ViewHitTester.hpp>
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprland/src/desktop/view/WLSurface.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
-#include <hyprland/src/helpers/Monitor.hpp>
+#include <hyprland/src/output/Monitor.hpp>
+#include <hyprland/src/state/MonitorState.hpp>
+#include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/helpers/time/Time.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
@@ -46,8 +51,8 @@ CBox goalBox(PHLWINDOW window) {
     if (!window)
         return {0.0, 0.0, 0.0, 0.0};
 
-    const auto position = window->m_realPosition->goal();
-    const auto size     = window->m_realSize->goal();
+    const auto position = window->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
+    const auto size     = window->size(Desktop::View::IGeometric::GEOMETRIC_GOAL);
     return {position.x, position.y, size.x, size.y};
 }
 
@@ -118,7 +123,7 @@ bool currentWorkspaceHasFullscreen(PHLMONITOR monitor) {
         return false;
 
     const auto workspace = selectedWorkspace(monitor);
-    return monitor->inFullscreenMode() || (workspace && workspace->getFullscreenWindow());
+    return Fullscreen::controller()->hasFullscreen(monitor) || (workspace && Fullscreen::controller()->hasFullscreen(workspace));
 }
 
 bool windowBelongsToActiveWorkspace(PHLWINDOW window, PHLMONITOR monitor) {
@@ -242,7 +247,7 @@ bool layerNamespaceMatches(const RuntimeConfig& config, PHLLS layerSurface) {
 
 PHLWINDOW stockWindowHit(const Vector2D& coords) {
     constexpr uint16_t flags = Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING | Desktop::View::FOLLOW_MOUSE_CHECK;
-    return g_pCompositor ? g_pCompositor->vectorToWindowUnified(coords, flags) : nullptr;
+    return Desktop::viewState() ? Desktop::viewState()->hitTest().windowAt(coords, flags) : nullptr;
 }
 
 PHLLS stockUpperLayerHit(const Vector2D& coords, PHLMONITOR monitor) {
@@ -252,7 +257,7 @@ PHLLS stockUpperLayerHit(const Vector2D& coords, PHLMONITOR monitor) {
     Vector2D layerLocal;
     PHLLS    layerSurface = nullptr;
 
-    if (g_pCompositor->vectorToLayerPopupSurface(coords, monitor, &layerLocal, &layerSurface))
+    if (Desktop::viewState()->hitTest().layerPopupSurfaceAt(coords, monitor, &layerLocal, &layerSurface))
         return layerSurface;
 
     constexpr std::array layers = {
@@ -261,7 +266,7 @@ PHLLS stockUpperLayerHit(const Vector2D& coords, PHLMONITOR monitor) {
     };
 
     for (const auto layer : layers) {
-        if (g_pCompositor->vectorToLayerSurface(coords, &monitor->m_layerSurfaceLayers[layer], &layerLocal, &layerSurface))
+        if (Desktop::viewState()->hitTest().layerSurfaceAt(coords, &monitor->m_layerSurfaceLayers[layer], &layerLocal, &layerSurface))
             return layerSurface;
     }
 
@@ -281,7 +286,7 @@ PHLLS stockLowerLayerHit(const Vector2D& coords, PHLMONITOR monitor) {
     };
 
     for (const auto layer : layers) {
-        if (g_pCompositor->vectorToLayerSurface(coords, &monitor->m_layerSurfaceLayers[layer], &layerLocal, &layerSurface))
+        if (Desktop::viewState()->hitTest().layerSurfaceAt(coords, &monitor->m_layerSurfaceLayers[layer], &layerLocal, &layerSurface))
             return layerSurface;
     }
 
@@ -293,8 +298,8 @@ bool forcedFocusActive() {
 
     if (g_pInputManager)
         forcedFocus = g_pInputManager->m_forcedFocus.lock();
-    if (!forcedFocus && g_pCompositor)
-        forcedFocus = g_pCompositor->getForceFocus();
+    if (!forcedFocus && Desktop::viewState())
+        forcedFocus = Desktop::viewState()->query().forceFocus().runWindow();
 
     return static_cast<bool>(forcedFocus);
 }
@@ -429,9 +434,9 @@ bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetP
             return false;
 
         surface      = windowSurface->resource();
-        surfaceLocal = (clampedTargetPoint - window->m_realPosition->value()) * window->m_X11SurfaceScaledBy;
+        surfaceLocal = (clampedTargetPoint - window->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT)) * window->m_X11SurfaceScaledBy;
     } else {
-        surface = g_pCompositor->vectorWindowToSurface(clampedTargetPoint, window, surfaceLocal);
+        surface = Desktop::viewState()->hitTest().windowSurfaceAt(clampedTargetPoint, window, surfaceLocal);
 
         if (!surface) {
             const auto windowSurface = window->wlSurface();
@@ -439,7 +444,7 @@ bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetP
                 return false;
 
             surface      = windowSurface->resource();
-            surfaceLocal = clampedTargetPoint - window->m_realPosition->value();
+            surfaceLocal = clampedTargetPoint - window->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
         }
     }
 
@@ -479,7 +484,7 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
         return;
     }
 
-    const auto monitor = g_pCompositor->getMonitorFromVector(coords);
+    const auto monitor = State::monitorState()->query().vec(coords).run();
     if (!monitor) {
         clearSynthetic();
         return;
@@ -590,7 +595,7 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
     std::vector<PHLWINDOW>         windows;
     std::vector<WindowCandidate>   candidates;
 
-    for (const auto& window : g_pCompositor->m_windows) {
+    for (const auto& window : Desktop::viewState()->windows()) {
         if (!window || !window->m_isMapped || window->isHidden() || window->m_monitor != monitor || !windowBelongsToActiveWorkspace(window, monitor) || !window->acceptsInput() ||
             window->m_X11ShouldntFocus || noFocus(window))
             continue;
