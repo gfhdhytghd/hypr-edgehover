@@ -43,7 +43,7 @@ foreach(inc ${HYPR_DEPS_INCLUDE_DIRS})
 endforeach()
 
 target_link_directories(hypr-edgehover PRIVATE ${HYPR_DEPS_LIBRARY_DIRS})
-target_link_libraries(hypr-edgehover PRIVATE ${HYPR_DEPS_LIBRARIES})
+target_link_libraries(hypr-edgehover PRIVATE ${HYPR_DEPS_LIBRARIES} ${CMAKE_DL_LIBS})
 
 if(BUILD_TESTING)
   add_executable(hypr-edgehover-geometry-test

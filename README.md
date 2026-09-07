@@ -86,3 +86,21 @@ hyprpm update
 ```
 
 The configured hyprpm output is `build-cmake/libhypr-edgehover.so`, matching the CMake target output.
+
+
+### Viewflow remote input capture
+
+When Viewflow's `viewflow-hyprland` plugin exports
+`viewflow_input_capture_active_v1`, edgehover checks this optional synchronous
+query before handling mouse motion, buttons, and wheel events. While capture
+is active it clears its synthetic/sticky target and leaves physical events to
+Viewflow, regardless of event-listener registration order. Local edge behavior
+returns when capture ends. The query is resolved from the currently loaded
+plugin handle on each call; no function pointer is retained across unload.
+Viewflow is not a required dependency.
+
+The local compatibility build used on this desktop is installed at
+`~/.local/lib/hyprland/hypr-edgehover-viewflow.so`; `hypr-edgehover-local` loads
+it after the existing startup `hyprpm reload` and before the config reload.
+The root-owned hyprpm cache is unchanged. A manual `hyprpm reload` should be
+followed by `hypr-edgehover-local` to keep using this local build.

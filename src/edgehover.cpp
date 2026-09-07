@@ -1,6 +1,24 @@
 #include "edgehover.hpp"
 
 #include "geometry.hpp"
+#include <hyprland/src/plugins/PluginSystem.hpp>
+#include <dlfcn.h>
+
+namespace {
+bool viewflowCaptureActive() {
+    if (!g_pPluginSystem) return false;
+    for (const auto* plugin : g_pPluginSystem->getAllPlugins()) {
+        if (!plugin || plugin->m_name != "viewflow-hyprland" || !plugin->m_handle) continue;
+        // Resolve from the currently loaded handle on every call. Retaining a
+        // function pointer would be unsafe across plugin unload/reload.
+        using Query = bool (*)();
+        const auto query = reinterpret_cast<Query>(dlsym(plugin->m_handle, "viewflow_input_capture_active_v1"));
+        return query && query();
+    }
+    return false;
+}
+}
+
 
 #include <algorithm>
 #include <array>
@@ -467,6 +485,15 @@ bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetP
 }
 
 void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& info) {
+    // Remote capture owns this physical event regardless of listener order.
+    // The query becomes false immediately on return to the local desktop.
+    if (viewflowCaptureActive()) {
+        clearStickAndSynthetic();
+        m_bypassNext = false;
+        info.cancelled = true;
+        return;
+    }
+
     if (m_bypassNext) {
         m_bypassNext = false;
         clearSynthetic();
@@ -640,6 +667,15 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
 }
 
 void EdgeHover::handleMouseButton(const IPointer::SButtonEvent& event, Event::SCallbackInfo& info) {
+    // Remote capture owns this physical event regardless of listener order.
+    // The query becomes false immediately on return to the local desktop.
+    if (viewflowCaptureActive()) {
+        clearStickAndSynthetic();
+        m_bypassNext = false;
+        info.cancelled = true;
+        return;
+    }
+
     if (info.cancelled)
         return;
 
@@ -683,6 +719,15 @@ void EdgeHover::handleMouseButton(const IPointer::SButtonEvent& event, Event::SC
 }
 
 void EdgeHover::handleMouseAxis(const IPointer::SAxisEvent& event, Event::SCallbackInfo& info) {
+    // Remote capture owns this physical event regardless of listener order.
+    // The query becomes false immediately on return to the local desktop.
+    if (viewflowCaptureActive()) {
+        clearStickAndSynthetic();
+        m_bypassNext = false;
+        info.cancelled = true;
+        return;
+    }
+
     (void)event;
 
     if (info.cancelled || !m_synthetic.active)
