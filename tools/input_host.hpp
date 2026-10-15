@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <set>
@@ -45,6 +46,9 @@ using HANDLE=void*; struct CHyprSignalListener{};
 namespace Event {struct SCallbackInfo {bool cancelled=false;};}
 constexpr int WL_POINTER_BUTTON_STATE_RELEASED=0,WL_POINTER_BUTTON_STATE_PRESSED=1;
 struct IPointer {struct SButtonEvent{uint32_t button=272;int state=0;};struct SAxisEvent{};};
+class CInputManager {};
+class CFunctionHook {public:void* m_original=nullptr;};
+static std::function<void()> simulation;
 static bool remote=false,full=false;
 static bool viewflowCaptureActive(){return remote;}
 namespace Fullscreen {struct Controller {template<class T> bool hasFullscreen(T){return full;}}; static Controller* controller(){static Controller c;return &c;}}
@@ -57,7 +61,7 @@ struct ViewTracker{std::vector<PHLWINDOW> data;auto& windows(){return data;} Hit
 static ViewTracker* viewState(){static ViewTracker v;return &v;}}
 struct FakeInput {bool held=false,constrained=false;int simulations=0;std::vector<int> m_exclusiveLSes; bool m_emptyFocusCursorSet=false,m_lastFocusOnLS=false;
  struct Relay{bool popup=false;bool popupFromCoords(Vector2D){return popup;}}m_relay;
- bool hasHeldButtons(){return held;} bool isConstrained(){return constrained;} void simulateMouseMovement(){++simulations;}
+ bool hasHeldButtons(){return held;} bool isConstrained(){return constrained;} void simulateMouseMovement(){++simulations;if(simulation)simulation();}
 };
 static FakeInput input; static auto* g_pInputManager=&input;
 struct FakeSeat{bool m_seatGrab=false;int motions=0;SP<CWLSurfaceResource> pointer;

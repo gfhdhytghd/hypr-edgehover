@@ -14,7 +14,7 @@ src = (root / "src/edgehover.cpp").read_text()
 hdr = (root / "src/edgehover.hpp").read_text()
 helpers = src[src.index("Rect boxToRect("):src.index("bool noFocus(")]
 methods = src[src.index("void EdgeHover::clearSynthetic()"):]
-cls = hdr[hdr.index("namespace hypr_edgehover {"):].replace("  private:", "  public:")
+cls = hdr[hdr.index("namespace hypr_edgehover {"):].replace("  private:", "  public:").replace("~EdgeHover();", "~EdgeHover() = default;")
 code = ((fixtures / "input_host.hpp").read_text() + cls +
         "\nnamespace hypr_edgehover { namespace {\n" + helpers + "} }\n" +
         (fixtures / "input_bridge.hpp").read_text() + methods +

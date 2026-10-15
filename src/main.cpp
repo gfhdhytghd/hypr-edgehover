@@ -1,5 +1,6 @@
 #include <memory>
 #include <string>
+#include <stdexcept>
 
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/config/values/types/IntValue.hpp>
@@ -67,7 +68,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
     g_edgeHover = std::make_unique<hypr_edgehover::EdgeHover>(g_pluginHandle);
     if (!g_edgeHover->initialize()) {
-        HyprlandAPI::addNotification(g_pluginHandle, "[hypr-edgehover] failed to initialize input listener", CHyprColor(1.0, 0.2, 0.2, 1.0), 5000);
+        g_edgeHover.reset();
+        throw std::runtime_error("hypr-edgehover: failed to initialize button hook or input listeners");
     }
 
     if (!HyprlandAPI::reloadConfig()) {

@@ -11,6 +11,9 @@
 
 #include "geometry.hpp"
 
+class CInputManager;
+class CFunctionHook;
+
 namespace hypr_edgehover {
 
 enum class SyntheticSource {
@@ -70,11 +73,12 @@ struct ZoneRangesCache {
 class EdgeHover {
   public:
     explicit EdgeHover(HANDLE handle);
-    ~EdgeHover() = default;
+    ~EdgeHover();
 
     bool initialize();
 
   private:
+    static void   mouseButtonHook(CInputManager* input, IPointer::SButtonEvent event, SP<IPointer> pointer);
     RuntimeConfig readConfig() const;
     void          handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& info);
     void          handleMouseButton(const IPointer::SButtonEvent& event, Event::SCallbackInfo& info);
@@ -84,6 +88,9 @@ class EdgeHover {
     void          clearStickButtons();
     void          clearStickAndSynthetic();
 
+    inline static EdgeHover* s_buttonOwner = nullptr;
+    CFunctionHook*          m_buttonHook = nullptr;
+    bool                   m_buttonBypass = false;
     HANDLE                  m_handle = nullptr;
     CHyprSignalListener     m_mouseMoveListener;
     CHyprSignalListener     m_mouseButtonListener;
