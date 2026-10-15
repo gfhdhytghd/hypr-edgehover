@@ -53,6 +53,10 @@ if(BUILD_TESTING)
 
   target_include_directories(hypr-edgehover-geometry-test PRIVATE src)
   add_test(NAME hypr-edgehover-geometry-test COMMAND hypr-edgehover-geometry-test)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_test(NAME hypr-edgehover-input-regression
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/input_regression.py
+      --build-dir ${CMAKE_CURRENT_BINARY_DIR}/input-regression --cxx ${CMAKE_CXX_COMPILER})
 endif()
 
 install(TARGETS hypr-edgehover LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
