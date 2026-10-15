@@ -34,7 +34,7 @@ bool viewflowCaptureActive() {
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/ConfigValue.hpp>
 #include <hyprland/src/config/ConfigManager.hpp>
-#include <hyprland/src/desktop/Workspace.hpp>
+#include <hyprland/src/workspace/HLWorkspace.hpp>
 #include <hyprland/src/desktop/rule/windowRule/WindowRuleApplicator.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/state/ViewState.hpp>
@@ -42,7 +42,7 @@ bool viewflowCaptureActive() {
 #include <hyprland/src/desktop/state/ViewHitTester.hpp>
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprland/src/desktop/view/WLSurface.hpp>
-#include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/desktop/view/window/Window.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/state/MonitorState.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
@@ -446,13 +446,13 @@ bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetP
     Vector2D                 surfaceLocal;
     SP<CWLSurfaceResource>   surface;
 
-    if (window->m_isX11) {
+    if (window->backend().isX11()) {
         const auto windowSurface = window->wlSurface();
         if (!windowSurface)
             return false;
 
         surface      = windowSurface->resource();
-        surfaceLocal = (clampedTargetPoint - window->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT)) * window->m_X11SurfaceScaledBy;
+        surfaceLocal = window->backend().surfaceLocalToBuffer(clampedTargetPoint - window->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT));
     } else {
         surface = Desktop::viewState()->hitTest().windowSurfaceAt(clampedTargetPoint, window, surfaceLocal);
 
@@ -536,7 +536,7 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
         return;
     }
 
-    if (!g_pInputManager->m_exclusiveLSes.empty() || (hasHeldButtons && !m_stickButtons) || focusedWindowConfinesPointer() || forcedFocusActive()) {
+    if (!g_pInputManager->m_exclusiveKeyboardLSes.empty() || (hasHeldButtons && !m_stickButtons) || focusedWindowConfinesPointer() || forcedFocusActive()) {
         clearSynthetic();
         return;
     }
@@ -623,8 +623,8 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
     std::vector<WindowCandidate>   candidates;
 
     for (const auto& window : Desktop::viewState()->windows()) {
-        if (!window || !window->m_isMapped || window->isHidden() || window->m_monitor != monitor || !windowBelongsToActiveWorkspace(window, monitor) || !window->acceptsInput() ||
-            window->m_X11ShouldntFocus || noFocus(window))
+        if (!window || !window->mapped() || window->isHidden() || window->m_monitor != monitor || !windowBelongsToActiveWorkspace(window, monitor) || !window->acceptsInput() ||
+            window->shouldntFocus() || noFocus(window))
             continue;
         if (source == SyntheticSource::Overhang && window == hitWindow)
             continue;

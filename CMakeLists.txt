@@ -36,12 +36,6 @@ add_library(hypr-edgehover SHARED
 
 target_include_directories(hypr-edgehover PRIVATE ${HYPR_DEPS_INCLUDE_DIRS} src)
 
-foreach(inc ${HYPR_DEPS_INCLUDE_DIRS})
-  if(EXISTS "${inc}/hyprland/src")
-    target_include_directories(hypr-edgehover PRIVATE "${inc}/hyprland/src")
-  endif()
-endforeach()
-
 target_link_directories(hypr-edgehover PRIVATE ${HYPR_DEPS_LIBRARY_DIRS})
 target_link_libraries(hypr-edgehover PRIVATE ${HYPR_DEPS_LIBRARIES} ${CMAKE_DL_LIBS})
 
