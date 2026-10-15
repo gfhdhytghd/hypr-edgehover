@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <iostream>
 #include <functional>
+#include <wayland-server-core.h>
 #include <memory>
 #include <optional>
 #include <set>
@@ -46,8 +47,6 @@ using HANDLE=void*; struct CHyprSignalListener{};
 namespace Event {struct SCallbackInfo {bool cancelled=false;};}
 constexpr int WL_POINTER_BUTTON_STATE_RELEASED=0,WL_POINTER_BUTTON_STATE_PRESSED=1;
 struct IPointer {struct SButtonEvent{uint32_t button=272;int state=0;};struct SAxisEvent{};};
-class CInputManager {};
-class CFunctionHook {public:void* m_original=nullptr;};
 static std::function<void()> simulation;
 static bool remote=false,full=false;
 static bool viewflowCaptureActive(){return remote;}
@@ -70,7 +69,8 @@ static FakeSeat seat;static auto* g_pSeatManager=&seat;
 struct Lock{bool locked=false;bool isSessionLocked(){return locked;}};static Lock lock;static auto* g_pSessionLockManager=&lock;
 struct Layout {struct Drag{bool value=false;bool target(){return value;}} drag;auto* dragController(){return &drag;}};
 static Layout layout;static auto* g_layoutManager=&layout;
-static int compositor;static auto* g_pCompositor=&compositor;
+struct FakeCompositor {wl_display* m_wlDisplay=wl_display_create();};
+static FakeCompositor compositor;static auto* g_pCompositor=&compositor;
 namespace Time {static int steadyNow(){return 0;}static int millis(int x){return x;}}
 
 namespace Config {using INTEGER=long;}

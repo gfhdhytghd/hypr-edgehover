@@ -20,7 +20,7 @@ static void stockMove() {
  Event::SCallbackInfo info;owner->handleMouseMove({1,400},info);++nestedMoves;
  if (!info.cancelled) seat.pointer=native->surf->data;
 }
-static void stockButton(CInputManager*,IPointer::SButtonEvent event,SP<IPointer>) {
+static void stockButton(IPointer::SButtonEvent event) {
  Event::SCallbackInfo info;owner->handleMouseButton(event,info);assert(!info.cancelled);
  // A slow click leaves keyboard focus synthetic after simulateMouseMovement.
  // Stock may refocus multiple times before finally delivering this button.
@@ -33,21 +33,39 @@ static void stockButton(CInputManager*,IPointer::SButtonEvent event,SP<IPointer>
 static void buttonCases(EdgeHover& e) {
  reset(e);owner=&e;native=std::make_shared<FakeWindow>();
  auto target=addWindow(100,mon->m_activeWorkspace);
- CFunctionHook hook;hook.m_original=reinterpret_cast<void*>(stockButton);
- e.m_buttonHook=&hook;EdgeHover::s_buttonOwner=&e;
  e.m_synthetic={true,SyntheticSource::Overhang,target};seat.pointer=target->surf->data;
  cfg.overhangPass.click=false;simulation=stockMove;
- e.mouseButtonHook(nullptr,{272,1},{});
- assert(stockButtons==1&&nestedMoves==3&&!e.m_buttonBypass&&!e.m_synthetic.active);
+ stockButton({272,1});
+ assert(stockButtons==1&&nestedMoves==3&&e.m_buttonBypass&&!e.m_synthetic.active);
+ assert(e.m_buttonBypassIdle);
+ // Even extra synchronous motions cannot consume the button barrier.
+ stockMove();assert(seat.pointer==native->surf->data&&e.m_buttonBypass);
+ wl_event_loop_dispatch_idle(wl_display_get_event_loop(compositor.m_wlDisplay));
+ assert(!e.m_buttonBypass&&!e.m_buttonBypassIdle);
  // The next physical motion can synthesize again: bypass cannot leak.
  move(e);assert(e.m_synthetic.active&&seat.pointer==target->surf->data);
  e.m_synthetic.source=SyntheticSource::Overhang;cfg.overhangPass.click=true;allowClick=true;
- input.held=true;e.mouseButtonHook(nullptr,{272,1},{});
+ input.held=true;stockButton({272,1});
  assert(e.m_stickButtons&&stockButtons==2&&!e.m_buttonBypass);
- e.mouseButtonHook(nullptr,{272,0},{});input.held=false;
+ stockButton({272,0});input.held=false;
  assert(!e.m_stickButtons&&stockButtons==3);
- simulation={};e.m_buttonHook=nullptr;EdgeHover::s_buttonOwner=nullptr;
- std::cout<<"button: simulate + repeated refocus, click enabled, release and next motion PASS\n";
+ // Multiple presses before idle share one source. Destroying the owner
+ // cancels it; dispatching the loop afterwards must not touch freed state.
+ auto temporary=std::make_unique<EdgeHover>(nullptr);owner=temporary.get();
+ temporary->m_synthetic={true,SyntheticSource::Overhang,target};cfg.overhangPass.click=false;allowClick=false;
+ Event::SCallbackInfo info;temporary->handleMouseButton({272,1},info);
+ auto* idle=temporary->m_buttonBypassIdle;assert(idle);
+ temporary->m_synthetic={true,SyntheticSource::Overhang,target};
+ temporary->handleMouseButton({273,1},info);assert(temporary->m_buttonBypassIdle==idle);
+ temporary.reset();owner=nullptr;simulation={};
+ wl_event_loop_dispatch_idle(wl_display_get_event_loop(compositor.m_wlDisplay));
+ // If no idle cleanup can be scheduled, the press must not reach stale focus.
+ auto* display=compositor.m_wlDisplay;compositor.m_wlDisplay=nullptr;
+ e.m_synthetic={true,SyntheticSource::Overhang,target};
+ Event::SCallbackInfo failed;e.handleMouseButton({272,1},failed);
+ assert(failed.cancelled&&!e.m_buttonBypass&&!e.m_buttonBypassIdle);
+ compositor.m_wlDisplay=display;
+ std::cout<<"button: repeated refocus, idle release, click enabled and destruction cancellation PASS\n";
 }
 int main() {
  EdgeHover e{nullptr};reset(e);
@@ -81,4 +99,5 @@ int main() {
  assert(!e.m_synthetic.active&&!e.m_stickButtons);
  std::cout<<"sticky targets: recheck special/modal input blocking PASS\n";
  buttonCases(e);
+ wl_display_destroy(compositor.m_wlDisplay);compositor.m_wlDisplay=nullptr;
 }

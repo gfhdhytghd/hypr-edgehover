@@ -2,8 +2,8 @@
 
 #include "geometry.hpp"
 #include <hyprland/src/plugins/PluginSystem.hpp>
-#include <hyprland/src/plugins/HookSystem.hpp>
 #include <dlfcn.h>
+#include <wayland-server-core.h>
 
 namespace {
 bool viewflowCaptureActive() {
@@ -380,26 +380,11 @@ bool shouldFocusKeyboard(const RuntimeConfig& config, PHLWINDOW window) {
 EdgeHover::EdgeHover(HANDLE handle) : m_handle(handle) {}
 
 EdgeHover::~EdgeHover() {
-    if (m_buttonHook)
-        HyprlandAPI::removeFunctionHook(m_handle, m_buttonHook);
-    if (s_buttonOwner == this)
-        s_buttonOwner = nullptr;
+    if (m_buttonBypassIdle)
+        wl_event_source_remove(m_buttonBypassIdle);
 }
 
 bool EdgeHover::initialize() {
-    void* address = nullptr;
-    for (const auto& function : HyprlandAPI::findFunctionsByName(m_handle, "onMouseButton")) {
-        if (function.demangled.starts_with("CInputManager::onMouseButton(IPointer::SButtonEvent,"))
-            address = function.address;
-    }
-    if (!address)
-        return false;
-
-    m_buttonHook = HyprlandAPI::createFunctionHook(m_handle, address, reinterpret_cast<void*>(mouseButtonHook));
-    if (!m_buttonHook || !m_buttonHook->hook())
-        return false;
-    s_buttonOwner = this;
-
     m_mouseMoveListener = Event::bus()->m_events.input.mouse.move.listen([this](const Vector2D& coords, Event::SCallbackInfo& info) {
         handleMouseMove(coords, info);
     });
@@ -470,19 +455,6 @@ void EdgeHover::clearStickButtons() {
 void EdgeHover::clearStickAndSynthetic() {
     clearStickButtons();
     clearSynthetic();
-}
-
-void EdgeHover::mouseButtonHook(CInputManager* input, IPointer::SButtonEvent event, SP<IPointer> pointer) {
-    auto& owner = *s_buttonOwner;
-    // The event listener runs before stock button processing. Keep its bypass
-    // through every nested mouseMoveUnified/refocus until the original returns.
-    struct Guard {
-        bool& bypass;
-        bool previous;
-        ~Guard() { bypass = previous; }
-    } guard{owner.m_buttonBypass, owner.m_buttonBypass};
-
-    reinterpret_cast<void (*)(CInputManager*, IPointer::SButtonEvent, SP<IPointer>)>(owner.m_buttonHook->m_original)(input, event, pointer);
 }
 
 bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetPoint, const RuntimeConfig& config, SyntheticSource source) {
@@ -774,6 +746,24 @@ void EdgeHover::handleMouseButton(const IPointer::SButtonEvent& event, Event::SC
 
     clearSynthetic();
     if (g_pInputManager) {
+        // Stock may refocus repeatedly after this listener returns. An idle
+        // cannot run until synchronous button processing has finished.
+        if (!m_buttonBypassIdle && g_pCompositor && g_pCompositor->m_wlDisplay) {
+            m_buttonBypassIdle = wl_event_loop_add_idle(
+                wl_display_get_event_loop(g_pCompositor->m_wlDisplay),
+                [](void* data) {
+                    auto& owner = *static_cast<EdgeHover*>(data);
+                    owner.m_buttonBypassIdle = nullptr;
+                    owner.m_buttonBypass = false;
+                },
+                this);
+        }
+        if (!m_buttonBypassIdle) {
+            // Without a cleanup source, do not leave stale synthetic focus
+            // eligible to receive this press.
+            info.cancelled = true;
+            return;
+        }
         m_buttonBypass = true;
         g_pInputManager->simulateMouseMovement();
     }
