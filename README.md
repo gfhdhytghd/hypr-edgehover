@@ -104,3 +104,8 @@ The local compatibility build used on this desktop is installed at
 it after the existing startup `hyprpm reload` and before the config reload.
 The root-owned hyprpm cache is unchanged. A manual `hyprpm reload` should be
 followed by `hypr-edgehover-local` to keep using this local build.
+
+## License
+
+Licensed under the GNU General Public License, version 3 only
+(`GPL-3.0-only`). See [LICENSE](LICENSE).
