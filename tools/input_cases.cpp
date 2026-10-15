@@ -5,6 +5,7 @@ static void reset(EdgeHover& e) {
  fallthrough=0;modalBlocking=1;cfg=RuntimeConfig{};cfg.followMouse=1;
  cfg.zones={parseZones("0-100"),parseZones("0-100"),parseZones("0-100"),parseZones("0-100")};
  mon->m_activeSpecialWorkspace.reset();Desktop::focusState()->current.reset();
+ Desktop::focusState()->rawCalls=Desktop::focusState()->fullCalls=0;
  Desktop::viewState()->data.clear();e.clearStickAndSynthetic();
 }
 static PHLWINDOW addWindow(double x, PHLWORKSPACE ws) {
@@ -12,6 +13,25 @@ static PHLWINDOW addWindow(double x, PHLWORKSPACE ws) {
  Desktop::viewState()->data.push_back(w);return w;
 }
 static void move(EdgeHover& e) {Event::SCallbackInfo info;e.handleMouseMove({1,400},info);}
+static void fullscreenFocusCase(EdgeHover& e) {
+ reset(e);
+ auto target=addWindow(100,mon->m_activeWorkspace);
+ // Exercise delivery directly, as with a pinned target whose workspace
+ // entered fullscreen after selection. Focus must avoid the full-focus path.
+ full=true;
+ assert(e.deliverSyntheticMotion(target,{101,400},cfg,SyntheticSource::Gap));
+ assert(Desktop::focusState()->current==target);
+ assert(Desktop::focusState()->rawCalls==1&&Desktop::focusState()->fullCalls==0);
+ assert(full);
+ // Delivery must still reject newly blocked targets before focusing them.
+ target->m_xdgSurface->m_toplevel->modal=true;
+ assert(!e.deliverSyntheticMotion(target,{101,400},cfg,SyntheticSource::Gap));
+ target->m_xdgSurface->m_toplevel->modal=false;
+ mon->m_activeSpecialWorkspace=std::make_shared<FakeWorkspace>();
+ assert(!e.deliverSyntheticMotion(target,{101,400},cfg,SyntheticSource::Gap));
+ assert(Desktop::focusState()->rawCalls==1&&Desktop::focusState()->fullCalls==0);
+ std::cout<<"keyboard focus: raw path with fullscreen, special/modal delivery gates retained PASS\n";
+}
 static EdgeHover* owner;
 static PHLWINDOW native;
 static int stockButtons=0, nestedMoves=0;
@@ -74,7 +94,7 @@ int main() {
  auto special=addWindow(400,mon->m_activeSpecialWorkspace);
  move(e);assert(e.m_synthetic.target.lock()==special);
  assert(Desktop::focusState()->current==special);
- assert(Desktop::focusState()->fullCalls>0&&Desktop::focusState()->rawCalls==0);
+ assert(Desktop::focusState()->rawCalls>0&&Desktop::focusState()->fullCalls==0);
  fallthrough=1;move(e);assert(e.m_synthetic.target.lock()==normal);
  mon->m_activeSpecialWorkspace.reset();fallthrough=0;move(e);
  assert(e.m_synthetic.target.lock()==normal);
@@ -98,6 +118,7 @@ int main() {
  normal->m_xdgSurface->m_toplevel->modal=true;move(e);
  assert(!e.m_synthetic.active&&!e.m_stickButtons);
  std::cout<<"sticky targets: recheck special/modal input blocking PASS\n";
+ fullscreenFocusCase(e);
  buttonCases(e);
  wl_display_destroy(compositor.m_wlDisplay);compositor.m_wlDisplay=nullptr;
 }

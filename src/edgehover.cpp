@@ -503,7 +503,7 @@ bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetP
     g_pSeatManager->sendPointerMotion(Time::millis(Time::steadyNow()), surfaceLocal);
 
     if (passForSource(config, source).keyboard && shouldFocusKeyboard(config, window) && Desktop::focusState())
-        Desktop::focusState()->fullWindowFocus(window, Desktop::FOCUS_REASON_FFM, surface);
+        Desktop::focusState()->rawWindowFocus(window, Desktop::FOCUS_REASON_FFM, surface);
 
     m_synthetic.active = true;
     m_synthetic.source = source;
