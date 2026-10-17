@@ -1,8 +1,9 @@
 #include "edgehover.hpp"
 
 #include "geometry.hpp"
-#include <hyprland/src/plugins/PluginSystem.hpp>
+#include <src/plugins/PluginSystem.hpp>
 #include <dlfcn.h>
+#include <wayland-server-core.h>
 
 namespace {
 bool viewflowCaptureActive() {
@@ -30,27 +31,28 @@ bool viewflowCaptureActive() {
 #include <utility>
 #include <vector>
 
-#include <hyprland/protocols/wlr-layer-shell-unstable-v1.hpp>
-#include <hyprland/src/Compositor.hpp>
-#include <hyprland/src/config/ConfigValue.hpp>
-#include <hyprland/src/config/ConfigManager.hpp>
-#include <hyprland/src/workspace/HLWorkspace.hpp>
-#include <hyprland/src/desktop/rule/windowRule/WindowRuleApplicator.hpp>
-#include <hyprland/src/desktop/state/FocusState.hpp>
-#include <hyprland/src/desktop/state/ViewState.hpp>
-#include <hyprland/src/desktop/state/WindowState.hpp>
-#include <hyprland/src/desktop/state/ViewHitTester.hpp>
-#include <hyprland/src/desktop/view/LayerSurface.hpp>
-#include <hyprland/src/desktop/view/WLSurface.hpp>
-#include <hyprland/src/desktop/view/window/Window.hpp>
-#include <hyprland/src/output/Monitor.hpp>
-#include <hyprland/src/state/MonitorState.hpp>
-#include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
-#include <hyprland/src/helpers/time/Time.hpp>
-#include <hyprland/src/layout/LayoutManager.hpp>
-#include <hyprland/src/managers/SeatManager.hpp>
-#include <hyprland/src/managers/SessionLockManager.hpp>
-#include <hyprland/src/managers/input/InputManager.hpp>
+#include <protocols/wlr-layer-shell-unstable-v1.hpp>
+#include <src/Compositor.hpp>
+#include <src/config/ConfigValue.hpp>
+#include <src/config/ConfigManager.hpp>
+#include <src/workspace/HLWorkspace.hpp>
+#include <src/desktop/rule/windowRule/WindowRuleApplicator.hpp>
+#include <src/desktop/state/FocusState.hpp>
+#include <src/desktop/state/ViewState.hpp>
+#include <src/desktop/state/WindowState.hpp>
+#include <src/desktop/state/ViewHitTester.hpp>
+#include <src/desktop/view/LayerSurface.hpp>
+#include <src/desktop/view/WLSurface.hpp>
+#include <src/desktop/view/window/Window.hpp>
+#include <src/output/Monitor.hpp>
+#include <src/state/MonitorState.hpp>
+#include <src/managers/fullscreen/FullscreenController.hpp>
+#include <src/helpers/time/Time.hpp>
+#include <src/layout/LayoutManager.hpp>
+#include <src/managers/SeatManager.hpp>
+#include <src/managers/SessionLockManager.hpp>
+#include <src/managers/input/InputManager.hpp>
+#include <src/protocols/XDGShell.hpp>
 
 namespace hypr_edgehover {
 
@@ -148,7 +150,24 @@ bool windowBelongsToActiveWorkspace(PHLWINDOW window, PHLMONITOR monitor) {
     if (!window || !monitor || !window->m_workspace)
         return false;
 
+    static const auto PSPECIALFALLTHROUGH = CConfigValue<Config::INTEGER>("input:special_fallthrough");
+    if (monitor->m_activeSpecialWorkspace && !*PSPECIALFALLTHROUGH)
+        return window->m_workspace == monitor->m_activeSpecialWorkspace;
+
     return window->m_workspace == monitor->m_activeWorkspace || (monitor->m_activeSpecialWorkspace && window->m_workspace == monitor->m_activeSpecialWorkspace);
+}
+
+template <typename Window>
+bool shadowedByModal(const Window& window) {
+    static const auto PMODALPARENTBLOCKING = CConfigValue<Config::INTEGER>("general:modal_parent_blocking");
+    if (!window || !*PMODALPARENTBLOCKING)
+        return false;
+
+    if constexpr (requires { window->backend(); })
+        return !window->backend().isX11() && window->backend().traits().hasModalChild;
+    else
+        // Released 0.56 headers expose the same Wayland state via XDG.
+        return !window->m_isX11 && window->m_xdgSurface && window->m_xdgSurface->m_toplevel && window->m_xdgSurface->m_toplevel->anyChildModal();
 }
 
 bool noFocus(PHLWINDOW window) {
@@ -360,6 +379,11 @@ bool shouldFocusKeyboard(const RuntimeConfig& config, PHLWINDOW window) {
 
 EdgeHover::EdgeHover(HANDLE handle) : m_handle(handle) {}
 
+EdgeHover::~EdgeHover() {
+    if (m_buttonBypassIdle)
+        wl_event_source_remove(m_buttonBypassIdle);
+}
+
 bool EdgeHover::initialize() {
     m_mouseMoveListener = Event::bus()->m_events.input.mouse.move.listen([this](const Vector2D& coords, Event::SCallbackInfo& info) {
         handleMouseMove(coords, info);
@@ -437,6 +461,10 @@ bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetP
     if (!window || !g_pCompositor || !g_pSeatManager || !g_pInputManager)
         return false;
 
+    // Recheck pinned drag targets too: special/modal state can change after selection.
+    if (!windowBelongsToActiveWorkspace(window, window->m_monitor.lock()) || shadowedByModal(window))
+        return false;
+
     const Rect valueBox = boxToRect(window->getWindowMainSurfaceBox());
     if (valueBox.width <= 0.0 || valueBox.height <= 0.0)
         return false;
@@ -491,6 +519,11 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
         clearStickAndSynthetic();
         m_bypassNext = false;
         info.cancelled = true;
+        return;
+    }
+
+    if (m_buttonBypass) {
+        clearSynthetic();
         return;
     }
 
@@ -624,7 +657,7 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
 
     for (const auto& window : Desktop::viewState()->windows()) {
         if (!window || !window->mapped() || window->isHidden() || window->m_monitor != monitor || !windowBelongsToActiveWorkspace(window, monitor) || !window->acceptsInput() ||
-            window->shouldntFocus() || noFocus(window))
+            window->shouldntFocus() || noFocus(window) || shadowedByModal(window))
             continue;
         if (source == SyntheticSource::Overhang && window == hitWindow)
             continue;
@@ -713,7 +746,25 @@ void EdgeHover::handleMouseButton(const IPointer::SButtonEvent& event, Event::SC
 
     clearSynthetic();
     if (g_pInputManager) {
-        m_bypassNext = true;
+        // Stock may refocus repeatedly after this listener returns. An idle
+        // cannot run until synchronous button processing has finished.
+        if (!m_buttonBypassIdle && g_pCompositor && g_pCompositor->m_wlDisplay) {
+            m_buttonBypassIdle = wl_event_loop_add_idle(
+                wl_display_get_event_loop(g_pCompositor->m_wlDisplay),
+                [](void* data) {
+                    auto& owner = *static_cast<EdgeHover*>(data);
+                    owner.m_buttonBypassIdle = nullptr;
+                    owner.m_buttonBypass = false;
+                },
+                this);
+        }
+        if (!m_buttonBypassIdle) {
+            // Without a cleanup source, do not leave stale synthetic focus
+            // eligible to receive this press.
+            info.cancelled = true;
+            return;
+        }
+        m_buttonBypass = true;
         g_pInputManager->simulateMouseMovement();
     }
 }

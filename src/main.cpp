@@ -1,10 +1,10 @@
 #include <memory>
 #include <string>
 
-#include <hyprland/src/config/ConfigManager.hpp>
-#include <hyprland/src/config/values/types/IntValue.hpp>
-#include <hyprland/src/config/values/types/StringValue.hpp>
-#include <hyprland/src/plugins/PluginAPI.hpp>
+#include <src/config/ConfigManager.hpp>
+#include <src/config/values/types/IntValue.hpp>
+#include <src/config/values/types/StringValue.hpp>
+#include <src/plugins/PluginAPI.hpp>
 
 #include "edgehover.hpp"
 

@@ -27,6 +27,10 @@ endif()
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(HYPR_DEPS REQUIRED hyprland)
+# Resolve <src/...> only in the header tree selected by pkg-config, avoiding
+# accidental fallback to a different system Hyprland installation.
+find_path(HYPR_HEADER_ROOT NAMES src/plugins/PluginAPI.hpp
+  PATHS ${HYPR_DEPS_INCLUDE_DIRS} NO_DEFAULT_PATH REQUIRED)
 
 add_library(hypr-edgehover SHARED
   src/main.cpp
@@ -34,7 +38,7 @@ add_library(hypr-edgehover SHARED
   src/geometry.cpp
 )
 
-target_include_directories(hypr-edgehover PRIVATE ${HYPR_DEPS_INCLUDE_DIRS} src)
+target_include_directories(hypr-edgehover PRIVATE ${HYPR_HEADER_ROOT} ${HYPR_DEPS_INCLUDE_DIRS} src)
 
 target_link_directories(hypr-edgehover PRIVATE ${HYPR_DEPS_LIBRARY_DIRS})
 target_link_libraries(hypr-edgehover PRIVATE ${HYPR_DEPS_LIBRARIES} ${CMAKE_DL_LIBS})
@@ -47,6 +51,10 @@ if(BUILD_TESTING)
 
   target_include_directories(hypr-edgehover-geometry-test PRIVATE src)
   add_test(NAME hypr-edgehover-geometry-test COMMAND hypr-edgehover-geometry-test)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_test(NAME hypr-edgehover-input-regression
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/input_regression.py
+      --build-dir ${CMAKE_CURRENT_BINARY_DIR}/input-regression --cxx ${CMAKE_CXX_COMPILER})
 endif()
 
 install(TARGETS hypr-edgehover LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})

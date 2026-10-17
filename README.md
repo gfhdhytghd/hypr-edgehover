@@ -12,29 +12,31 @@ https://github.com/user-attachments/assets/40aa2ccf-4c51-4f4d-948a-f94ff19ae562
 
 ## Configuration
 
-All options live under `plugin:hypr_edgehover:`.
+This branch targets Hyprland Git HEAD (Lua configuration only). All options live under `plugin:hypr_edgehover:`; the `main` branch targets release 0.56.2.
 
-```ini
-plugin {
-    hypr_edgehover {
-        enabled = 1
-        edges = lrtb
-        inset = 1
-        max_distance = 0
-        keyboard_focus = -1
-        gap_pass = hover,click,scroll,keyboard
-        layer_pass = hover,keyboard
-        layer_namespaces =
-        overhang_pass = hover,keyboard
-        overhang_threshold = 8
-        overhang_edge_width = 0
-        steal_edge_width = 2
-        zones_top = 0-100
-        zones_bottom = 0-100
-        zones_left = 0-100
-        zones_right = 0-100
-    }
-}
+```lua
+hl.config({
+    plugin = {
+        hypr_edgehover = {
+            enabled = 1,
+            edges = "lrtb",
+            inset = 1,
+            max_distance = 0,
+            keyboard_focus = -1,
+            gap_pass = "hover,click,scroll,keyboard",
+            layer_pass = "hover,keyboard",
+            layer_namespaces = "",
+            overhang_pass = "hover,keyboard",
+            overhang_threshold = 8,
+            overhang_edge_width = 0,
+            steal_edge_width = 2,
+            zones_top = "0-100",
+            zones_bottom = "0-100",
+            zones_left = "0-100",
+            zones_right = "0-100",
+        },
+    },
+})
 ```
 
 - `enabled` (`int`, default `1`): enable the motion interception.
@@ -77,6 +79,10 @@ cmake --build build-cmake -j$(nproc)
 ctest --test-dir build-cmake --output-on-failure
 ```
 
+The build uses the default `pkg-config hyprland` header tree. `HYPR_HEADER_ROOT`
+is resolved inside that tree for `<src/...>` includes, so an unrelated system
+Hyprland installation cannot satisfy them accidentally.
+
 ## hyprpm
 
 ```sh
@@ -104,3 +110,8 @@ The local compatibility build used on this desktop is installed at
 it after the existing startup `hyprpm reload` and before the config reload.
 The root-owned hyprpm cache is unchanged. A manual `hyprpm reload` should be
 followed by `hypr-edgehover-local` to keep using this local build.
+
+## License
+
+Licensed under the GNU General Public License, version 3 only
+(`GPL-3.0-only`). See [LICENSE](LICENSE).

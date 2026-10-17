@@ -5,11 +5,13 @@
 #include <string>
 #include <vector>
 
-#include <hyprland/src/event/EventBus.hpp>
-#include <hyprland/src/helpers/math/Math.hpp>
-#include <hyprland/src/plugins/PluginAPI.hpp>
+#include <src/event/EventBus.hpp>
+#include <src/helpers/math/Math.hpp>
+#include <src/plugins/PluginAPI.hpp>
 
 #include "geometry.hpp"
+
+struct wl_event_source;
 
 namespace hypr_edgehover {
 
@@ -70,7 +72,7 @@ struct ZoneRangesCache {
 class EdgeHover {
   public:
     explicit EdgeHover(HANDLE handle);
-    ~EdgeHover() = default;
+    ~EdgeHover();
 
     bool initialize();
 
@@ -84,6 +86,8 @@ class EdgeHover {
     void          clearStickButtons();
     void          clearStickAndSynthetic();
 
+    wl_event_source*       m_buttonBypassIdle = nullptr;
+    bool                   m_buttonBypass = false;
     HANDLE                  m_handle = nullptr;
     CHyprSignalListener     m_mouseMoveListener;
     CHyprSignalListener     m_mouseButtonListener;
