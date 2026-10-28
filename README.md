@@ -69,7 +69,11 @@ Windows whose visible goal edge thickness is less than or equal to `overhang_thr
 
 OVERHANG classification and target selection use Hyprland's goal geometry, so scrolling-layout animations do not repeatedly flip between thin-strip and normal-window behavior. Delivery is still clamped against the current surface geometry before pointer motion is sent.
 
-Click forwarding is implemented without cancelling Hyprland's button events, so press/release pairing and mouse keybind handling stay on the stock path.
+Click forwarding is implemented without cancelling Hyprland's button events, so press/release pairing and mouse keybind handling stay on the stock path. A synthetic drag holds the exact surface that received the press until release or unmap.
+
+Touch refocus uses Hyprland's stock hit testing. Windows with `confine_pointer` are excluded from synthetic targets. Equal geometry scores prefer the top window; if Hyprland reports a different window at the final virtual point, forwarding yields to stock input. Native input capture suspends synthetic forwarding and clears its pending state.
+
+Plugin options remain available after `hyprctl reload full-reset`.
 
 ## Build
 
@@ -78,6 +82,8 @@ cmake -DCMAKE_BUILD_TYPE=Release -B build-cmake
 cmake --build build-cmake -j$(nproc)
 ctest --test-dir build-cmake --output-on-failure
 ```
+
+The build requires `libeis-1.0` development headers for Hyprland's native input capture API. GCC and Clang are supported for compilation; match the compositor's compiler when building a loadable plugin.
 
 The build uses the default `pkg-config hyprland` header tree. `HYPR_HEADER_ROOT`
 is resolved inside that tree for `<src/...>` includes, so an unrelated system
