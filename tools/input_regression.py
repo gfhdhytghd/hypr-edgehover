@@ -8,6 +8,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--source-root", type=Path, default=Path(__file__).resolve().parents[1])
 parser.add_argument("--build-dir", type=Path, required=True)
 parser.add_argument("--cxx", default="c++")
+parser.add_argument("--case", default="")
 parser.add_argument("--sanitize", action="store_true")
 args = parser.parse_args()
 root = args.source_root.resolve()
@@ -21,7 +22,8 @@ destructor = src[src.index("EdgeHover::~EdgeHover()"):src.index("bool EdgeHover:
 code = ((fixtures / "input_host.hpp").read_text() + cls +
         "\nnamespace hypr_edgehover { namespace {\n" + helpers + "} }\n" +
         (fixtures / "input_bridge.hpp").read_text() + destructor + methods +
-        (fixtures / "input_cases.cpp").read_text())
+        (fixtures / "input_cases.cpp").read_text() +
+        (fixtures / "review_cases.cpp").read_text())
 args.build_dir.mkdir(parents=True, exist_ok=True)
 cpp = args.build_dir / "input_regression.cpp"
 exe = args.build_dir / "input_regression"
@@ -30,4 +32,4 @@ flags = shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs",
 sanitizers = ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"] if args.sanitize else []
 subprocess.run([args.cxx, "-std=c++23", "-O0", "-g", *sanitizers, "-I" + str(root / "src"),
                 str(cpp), str(root / "src/geometry.cpp"), "-o", str(exe), *flags], check=True)
-subprocess.run([str(exe)], check=True)
+subprocess.run([str(exe), *([args.case] if args.case else [])], check=True)

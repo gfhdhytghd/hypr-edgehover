@@ -30,7 +30,7 @@ struct MonitorRef : SP<FakeMonitor> {
 };
 struct FakeTop {bool modal=false;bool anyChildModal(){return modal;}};
 struct FakeXdg {SP<FakeTop> m_toplevel=std::make_shared<FakeTop>();};
-struct FakeWindow { bool m_isMapped=true,hidden=false,m_isX11=false,m_X11ShouldntFocus=false,input=true;
+struct FakeWindow { bool m_isMapped=true,hidden=false,m_isX11=false,m_X11ShouldntFocus=false,input=true,confined=false;
  double m_X11SurfaceScaledBy=1; PHLWORKSPACE m_workspace; MonitorRef m_monitor; SP<FakeXdg> m_xdgSurface=std::make_shared<FakeXdg>();
  Vector2D pos{100,100},sz{800,600}; SP<FakeWLSurface> surf=std::make_shared<FakeWLSurface>();
  auto position(int) {return pos;} auto size(int){return sz;} CBox getWindowMainSurfaceBox(){return{pos.x,pos.y,sz.x,sz.y};}
@@ -47,6 +47,7 @@ namespace Event {struct SCallbackInfo {bool cancelled=false;};}
 constexpr int WL_POINTER_BUTTON_STATE_RELEASED=0,WL_POINTER_BUTTON_STATE_PRESSED=1;
 struct IPointer {struct SButtonEvent{uint32_t button=272;int state=0;};struct SAxisEvent{};};
 static std::function<void()> simulation;
+namespace PROTO {struct Capture {bool active=false;bool isCaptured(){return active;}};static auto inputCapture=std::make_shared<Capture>();}
 static bool remote=false,full=false;
 static bool viewflowCaptureActive(){return remote;}
 namespace Fullscreen {struct Controller {template<class T> bool hasFullscreen(T){return full;}}; static Controller* controller(){static Controller c;return &c;}}
@@ -57,7 +58,7 @@ static Focus* focusState(){static Focus f;return &f;} constexpr int FOCUS_REASON
 struct HitTester{SP<CWLSurfaceResource> windowSurfaceAt(Vector2D p,PHLWINDOW w,Vector2D& local){if(!w->m_isMapped)return{};local=p-w->pos;return w->wlSurface()->resource();}};
 struct ViewTracker{std::vector<PHLWINDOW> data;auto& windows(){return data;} HitTester hitTest(){return{};}};
 static ViewTracker* viewState(){static ViewTracker v;return &v;}}
-struct FakeInput {bool held=false,constrained=false;int simulations=0;std::vector<int> m_exclusiveKeyboardLSes; bool m_emptyFocusCursorSet=false,m_lastFocusOnLS=false;
+struct FakeInput {bool held=false,constrained=false;int simulations=0;std::vector<int> m_exclusiveKeyboardLSes; bool m_emptyFocusCursorSet=false,m_lastFocusOnLS=false,m_lastInputTouch=false,m_lastInputMouse=true;
  struct Relay{bool popup=false;bool popupFromCoords(Vector2D){return popup;}}m_relay;
  bool hasHeldButtons(){return held;} bool isConstrained(){return constrained;} void simulateMouseMovement(){++simulations;if(simulation)simulation();}
 };

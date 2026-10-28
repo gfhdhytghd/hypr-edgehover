@@ -26,7 +26,7 @@ if(CMAKE_EXPORT_COMPILE_COMMANDS)
 endif()
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(HYPR_DEPS REQUIRED hyprland)
+pkg_check_modules(HYPR_DEPS REQUIRED hyprland libeis-1.0)
 # Resolve <src/...> only in the header tree selected by pkg-config, avoiding
 # accidental fallback to a different system Hyprland installation.
 find_path(HYPR_HEADER_ROOT NAMES src/plugins/PluginAPI.hpp

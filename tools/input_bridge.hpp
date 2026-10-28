@@ -2,6 +2,7 @@
 namespace hypr_edgehover {
 static RuntimeConfig cfg;
 namespace {
+bool confinePointer(PHLWINDOW w){return w && w->confined;}
 bool noFocus(PHLWINDOW){return false;}
 bool noFollowMouse(PHLWINDOW){return false;}
 bool forcedFocusActive(){return false;}

@@ -85,6 +85,7 @@ class EdgeHover {
     void          clearSynthetic();
     void          clearStickButtons();
     void          clearStickAndSynthetic();
+    bool          bypassForCapture(Event::SCallbackInfo& info);
 
     wl_event_source*       m_buttonBypassIdle = nullptr;
     bool                   m_buttonBypass = false;
