@@ -1,4 +1,5 @@
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 #include <src/config/ConfigManager.hpp>
@@ -35,6 +36,18 @@ bool addStringConfig(const char* name, Config::STRING fallback) {
     return addConfigValue(makeShared<Config::Values::CStringValue>(name, "", fallback));
 }
 
+// Reject a build whose headers do not match the running compositor. The hash is
+// computed here because the API's inline client helper may be ELF-interposed by
+// another loaded plugin.
+void requireMatchingABI() {
+    const auto abiPrefix = [](std::string version) { return version.substr(0, version.find_last_of('.')); };
+    const std::string client = std::string(GIT_COMMIT_HASH) + "_aq_" + abiPrefix(AQUAMARINE_VERSION) + "_hu_" + abiPrefix(HYPRUTILS_VERSION) + "_hg_" +
+        abiPrefix(HYPRGRAPHICS_VERSION) + "_hc_" + abiPrefix(HYPRCURSOR_VERSION) + "_hlg_" + abiPrefix(HYPRLANG_VERSION);
+    const std::string runtime = __hyprland_api_get_hash();
+    if (runtime != client)
+        throw std::runtime_error("[hypr-edgehover] Hyprland header/runtime ABI mismatch: runtime=" + runtime + "; client=" + client);
+}
+
 } // namespace
 
 APICALL EXPORT std::string PLUGIN_API_VERSION() {
@@ -43,6 +56,7 @@ APICALL EXPORT std::string PLUGIN_API_VERSION() {
 
 APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     g_pluginHandle = handle;
+    requireMatchingABI();
 
 #define INT_CONF(name, value) addIntConfig("plugin:hypr_edgehover:" name, Config::INTEGER{value})
 #define STRING_CONF(name, value) addStringConfig("plugin:hypr_edgehover:" name, Config::STRING{value})
