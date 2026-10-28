@@ -58,6 +58,7 @@ bool viewflowCaptureActive() {
 #include <src/protocols/XDGShell.hpp>
 #include <src/protocols/InputCapture.hpp>
 #include <src/protocols/core/Compositor.hpp>
+#include <src/pointer/cursor/CursorShapeOverrideController.hpp>
 
 namespace hypr_edgehover {
 
@@ -541,6 +542,8 @@ bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetP
     if (!surface)
         return false;
 
+    g_pInputManager->m_borderIconDirection = BORDERICON_NONE;
+    Pointer::Cursor::overrideController->unsetOverride(Pointer::Cursor::CURSOR_OVERRIDE_WINDOW_EDGE);
     g_pInputManager->m_emptyFocusCursorSet = false;
     g_pInputManager->m_lastFocusOnLS       = false;
     g_pSeatManager->setPointerFocus(surface, surfaceLocal);

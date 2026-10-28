@@ -1,7 +1,7 @@
 
 using namespace hypr_edgehover;
 static void reset(EdgeHover& e) {
- input=FakeInput{};seat=FakeSeat{};remote=false;full=false;PROTO::inputCapture->active=false;lock.locked=false;
+ input=FakeInput{};seat=FakeSeat{};remote=false;full=false;Pointer::Cursor::overrideController->edge=false;Pointer::Cursor::overrideController->other=false;PROTO::inputCapture->active=false;lock.locked=false;
  fallthrough=0;modalBlocking=1;cfg=RuntimeConfig{};cfg.followMouse=1;
  cfg.zones={parseZones("0-100"),parseZones("0-100"),parseZones("0-100"),parseZones("0-100")};
  mon->m_activeSpecialWorkspace.reset();Desktop::focusState()->current.reset();
@@ -112,6 +112,7 @@ static void backendCases(EdgeHover& e) {
 }
 static void reviewCases(EdgeHover& e, const std::string& name);
 int main(int argc, char** argv) {
+ std::signal(SIGABRT, [](int){std::_Exit(86);});
  if(argc==2){EdgeHover e{nullptr};reviewCases(e,argv[1]);wl_display_destroy(compositor.m_wlDisplay);compositor.m_wlDisplay=nullptr;return 0;}
  EdgeHover e{nullptr};reset(e);
  auto normal=addWindow(100,mon->m_activeWorkspace);

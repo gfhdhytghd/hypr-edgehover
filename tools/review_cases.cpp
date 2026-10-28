@@ -85,6 +85,15 @@ static void occlusionCase(EdgeHover& e) {
  stockHit={};
  std::cout<<"review occlusion: stock priority rejects obscured target and permits front target PASS\n";
 }
+static void cursorCase(EdgeHover& e) {
+ reset(e);addWindow(100,mon->m_activeWorkspace);
+ input.m_borderIconDirection=3;Pointer::Cursor::overrideController->edge=true;
+ Pointer::Cursor::overrideController->other=true;
+ move(e);
+ assert(e.m_synthetic.active && input.m_borderIconDirection==BORDERICON_NONE);
+ assert(!Pointer::Cursor::overrideController->edge && Pointer::Cursor::overrideController->other);
+ std::cout<<"review cursor: clear border cache and override, preserve other override groups PASS\n";
+}
 static void reviewCases(EdgeHover& e,const std::string& name) {
  if(name=="all" || name=="confinement")confinementCase(e);
  if(name=="all" || name=="touch")touchCase(e);
@@ -92,4 +101,5 @@ static void reviewCases(EdgeHover& e,const std::string& name) {
  if(name=="all" || name=="sticky")stickySurfaceCase(e);
  if(name=="all" || name=="overlap")overlapCase(e);
  if(name=="all" || name=="occlusion")occlusionCase(e);
+ if(name=="all" || name=="cursor")cursorCase(e);
 }

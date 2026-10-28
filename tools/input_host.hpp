@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <csignal>
+#include <cstdlib>
 #include <cstdint>
 #include <iostream>
 #include <functional>
@@ -62,7 +64,9 @@ struct HitTester{SP<CWLSurfaceResource> windowSurfaceAt(Vector2D p,PHLWINDOW w,V
  Vector2D surfaceLocalAt(Vector2D p,PHLWINDOW w,SP<CWLSurfaceResource> s){return p-w->pos-s->offset;}};
 struct ViewTracker{std::vector<PHLWINDOW> data;auto& windows(){return data;} HitTester hitTest(){return{};}};
 static ViewTracker* viewState(){static ViewTracker v;return &v;}}
-struct FakeInput {bool held=false,constrained=false;int simulations=0;std::vector<int> m_exclusiveKeyboardLSes; bool m_emptyFocusCursorSet=false,m_lastFocusOnLS=false,m_lastInputTouch=false,m_lastInputMouse=true;
+constexpr int BORDERICON_NONE=0;
+namespace Pointer::Cursor {constexpr int CURSOR_OVERRIDE_WINDOW_EDGE=1;struct Override {bool edge=false,other=false;void unsetOverride(int){edge=false;}};static auto overrideController=std::make_shared<Override>();}
+struct FakeInput {int m_borderIconDirection=BORDERICON_NONE;bool held=false,constrained=false;int simulations=0;std::vector<int> m_exclusiveKeyboardLSes; bool m_emptyFocusCursorSet=false,m_lastFocusOnLS=false,m_lastInputTouch=false,m_lastInputMouse=true;
  struct Relay{bool popup=false;bool popupFromCoords(Vector2D){return popup;}}m_relay;
  bool hasHeldButtons(){return held;} bool isConstrained(){return constrained;} void simulateMouseMovement(){++simulations;if(simulation)simulation();}
 };
