@@ -44,8 +44,29 @@ static void captureCase(EdgeHover& e) {
  Event::SCallbackInfo remoteInfo;e.handleMouseButton({272,1},remoteInfo);assert(remoteInfo.cancelled);
  std::cout<<"review capture: three native routes preserve events, clear idle/bypass, resume local; Viewflow cancellation PASS\n";
 }
+static void stickySurfaceCase(EdgeHover& e) {
+ reset(e);cfg.keyboardFocus=0;auto target=addWindow(100,mon->m_activeWorkspace);
+ target->splitSurface=true;target->child->offset={0,350};
+ move(e);auto rootSurface=seat.pointer;
+ Event::SCallbackInfo press;e.handleMouseButton({272,1},press);input.held=true;seat.pressed=true;
+ Event::SCallbackInfo motion;e.handleMouseMove({1,500},motion);
+ assert(motion.cancelled && seat.pointer==rootSurface && seat.autoReleases==0 && e.m_stickButtons);
+ assert(seat.lastMotion.y==400);
+ // Unmapping the fixed surface must relinquish the synthetic grab.
+ rootSurface->m_mapped=false;move(e);assert(!e.m_stickButtons && !e.m_synthetic.active);
+ rootSurface->m_mapped=true;input.held=false;seat.pressed=false;
+ Event::SCallbackInfo hover;e.handleMouseMove({1,500},hover);
+ assert(hover.cancelled && seat.pointer==target->child);
+ Event::SCallbackInfo childPress;e.handleMouseButton({272,1},childPress);input.held=true;seat.pressed=true;
+ Event::SCallbackInfo childMotion;e.handleMouseMove({1,400},childMotion);
+ assert(childMotion.cancelled && seat.pointer==target->child && seat.autoReleases==0);
+ assert(seat.lastMotion.y==-50);
+ target->m_isMapped=false;move(e);assert(!e.m_synthetic.active && !e.m_stickButtons);
+ std::cout<<"review sticky: root and child grabs retain pressed surface and local coordinates; unmap clears PASS\n";
+}
 static void reviewCases(EdgeHover& e,const std::string& name) {
  if(name=="all" || name=="confinement")confinementCase(e);
  if(name=="all" || name=="touch")touchCase(e);
  if(name=="all" || name=="capture")captureCase(e);
+ if(name=="all" || name=="sticky")stickySurfaceCase(e);
 }

@@ -56,6 +56,7 @@ bool viewflowCaptureActive() {
 #include <src/managers/input/InputManager.hpp>
 #include <src/protocols/XDGShell.hpp>
 #include <src/protocols/InputCapture.hpp>
+#include <src/protocols/core/Compositor.hpp>
 
 namespace hypr_edgehover {
 
@@ -448,6 +449,7 @@ RuntimeConfig EdgeHover::readConfig() const {
 void EdgeHover::clearSynthetic() {
     m_synthetic.active = false;
     m_synthetic.target = {};
+    m_synthetic.surface.reset();
 }
 
 void EdgeHover::clearStickButtons() {
@@ -485,7 +487,8 @@ bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetP
         return false;
 
     // Recheck pinned drag targets too: special/modal state can change after selection.
-    if (!windowBelongsToActiveWorkspace(window, window->m_monitor.lock()) || shadowedByModal(window) || confinePointer(window))
+    if (!window->mapped() || window->isHidden() || !window->acceptsInput() ||
+        !windowBelongsToActiveWorkspace(window, window->m_monitor.lock()) || shadowedByModal(window) || confinePointer(window))
         return false;
 
     const Rect valueBox = boxToRect(window->getWindowMainSurfaceBox());
@@ -497,7 +500,16 @@ bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetP
     Vector2D                 surfaceLocal;
     SP<CWLSurfaceResource>   surface;
 
-    if (window->backend().isX11()) {
+    if (m_stickButtons) {
+        // Keep the exact pressed surface, as the fork's stock implicit grab
+        // does. Retargeting even within one window sends leave and releases.
+        surface = m_synthetic.surface.lock();
+        if (!surface || !surface->m_mapped || g_pSeatManager->m_state.pointerFocus.lock() != surface)
+            return false;
+        surfaceLocal = window->backend().isX11() ?
+            window->backend().surfaceLocalToBuffer(clampedTargetPoint - window->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT)) :
+            Desktop::viewState()->hitTest().surfaceLocalAt(clampedTargetPoint, window, surface);
+    } else if (window->backend().isX11()) {
         const auto windowSurface = window->wlSurface();
         if (!windowSurface)
             return false;
@@ -531,6 +543,7 @@ bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetP
     m_synthetic.active = true;
     m_synthetic.source = source;
     m_synthetic.target = window;
+    m_synthetic.surface = surface;
 
     return true;
 }
@@ -752,8 +765,9 @@ void EdgeHover::handleMouseButton(const IPointer::SButtonEvent& event, Event::SC
     const RuntimeConfig config = readConfig();
     if (config.enabled && passForSource(config, m_synthetic.source).click) {
         const auto pinnedWindow = m_synthetic.target.lock();
-        if (!pinnedWindow) {
-            clearSynthetic();
+        const auto pinnedSurface = m_synthetic.surface.lock();
+        if (!pinnedWindow || !pinnedSurface || !pinnedSurface->m_mapped || !g_pSeatManager || g_pSeatManager->m_state.pointerFocus.lock() != pinnedSurface) {
+            clearStickAndSynthetic();
             return;
         }
 

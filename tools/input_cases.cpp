@@ -38,7 +38,7 @@ static int stockButtons=0, nestedMoves=0;
 static bool allowClick=false;
 static void stockMove() {
  Event::SCallbackInfo info;owner->handleMouseMove({1,400},info);++nestedMoves;
- if (!info.cancelled) seat.pointer=native->surf->data;
+ if (!info.cancelled) seat.setPointerFocus(native->surf->data,{});
 }
 static void stockButton(IPointer::SButtonEvent event) {
  Event::SCallbackInfo info;owner->handleMouseButton(event,info);assert(!info.cancelled);
@@ -53,7 +53,7 @@ static void stockButton(IPointer::SButtonEvent event) {
 static void buttonCases(EdgeHover& e) {
  reset(e);owner=&e;native=std::make_shared<FakeWindow>();
  auto target=addWindow(100,mon->m_activeWorkspace);
- e.m_synthetic={true,SyntheticSource::Overhang,target};seat.pointer=target->surf->data;
+ e.m_synthetic={true,SyntheticSource::Overhang,target};seat.setPointerFocus(target->surf->data,{});
  cfg.overhangPass.click=false;simulation=stockMove;
  stockButton({272,1});
  assert(stockButtons==1&&nestedMoves==3&&e.m_buttonBypass&&!e.m_synthetic.active);

@@ -49,6 +49,7 @@ struct SyntheticState {
     bool            active = false;
     SyntheticSource source = SyntheticSource::Gap;
     PHLWINDOWREF    target;
+    WP<CWLSurfaceResource> surface;
 };
 
 struct PassSetCache {
