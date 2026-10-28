@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/40aa2ccf-4c51-4f4d-948a-f94ff19ae562
 
 ## Configuration
 
-This branch targets Hyprland Git HEAD (Lua configuration only). All options live under `plugin:hypr_edgehover:`; the `main` branch targets release 0.56.2.
+Targets Hyprland v0.57.0 as released by [gfhdhytghd/Hyprland](https://github.com/gfhdhytghd/Hyprland/releases/tag/v0.57.0) (`f6725e43`; Lua configuration only). All options live under `plugin:hypr_edgehover:`.
 
 ```lua
 hl.config({
