@@ -28,6 +28,7 @@ bool viewflowCaptureActive() {
 #include <cctype>
 #include <cstdint>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -497,6 +498,14 @@ bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetP
 
     const Vector2D clampedTargetPoint = pointToVector(clampPointToRectWithInset(vectorToPoint(targetPoint), valueBox, config.inset));
 
+    // Respect the fork's floating/pinned hit priority at the delivered point.
+    // An implicit button grab deliberately keeps its pressed surface instead.
+    if (!m_stickButtons) {
+        const auto front = stockWindowHit(clampedTargetPoint);
+        if (front && front != window)
+            return false;
+    }
+
     Vector2D                 surfaceLocal;
     SP<CWLSurfaceResource>   surface;
 
@@ -693,7 +702,7 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
     std::vector<PHLWINDOW>         windows;
     std::vector<WindowCandidate>   candidates;
 
-    for (const auto& window : Desktop::viewState()->windows()) {
+    for (const auto& window : Desktop::viewState()->windows() | std::views::reverse) {
         if (!window || !window->mapped() || window->isHidden() || window->m_monitor != monitor || !windowBelongsToActiveWorkspace(window, monitor) || !window->acceptsInput() ||
             window->shouldntFocus() || noFocus(window) || shadowedByModal(window) || confinePointer(window))
             continue;

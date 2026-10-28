@@ -6,7 +6,7 @@ static void reset(EdgeHover& e) {
  cfg.zones={parseZones("0-100"),parseZones("0-100"),parseZones("0-100"),parseZones("0-100")};
  mon->m_activeSpecialWorkspace.reset();Desktop::focusState()->current.reset();
  Desktop::focusState()->rawCalls=Desktop::focusState()->fullCalls=0;
- Desktop::viewState()->data.clear();e.clearStickAndSynthetic();
+ Desktop::viewState()->data.clear();stockHit={};e.clearStickAndSynthetic();
 }
 static PHLWINDOW addWindow(double x, PHLWORKSPACE ws) {
  auto w=std::make_shared<FakeWindow>();w->pos.x=x;w->m_monitor=mon;w->m_workspace=ws;

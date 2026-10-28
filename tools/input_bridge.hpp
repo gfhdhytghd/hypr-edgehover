@@ -9,7 +9,8 @@ bool forcedFocusActive(){return false;}
 bool focusedWindowConfinesPointer(){return false;}
 PHLLS stockUpperLayerHit(const Vector2D&,PHLMONITOR){return nullptr;}
 PHLLS stockLowerLayerHit(const Vector2D&,PHLMONITOR){return nullptr;}
-PHLWINDOW stockWindowHit(const Vector2D&){return nullptr;}
+static std::function<PHLWINDOW(const Vector2D&)> stockHit;
+PHLWINDOW stockWindowHit(const Vector2D& p){return stockHit?stockHit(p):nullptr;}
 bool layerNamespaceMatches(const RuntimeConfig&,PHLLS){return true;}
 PassSet passForSource(const RuntimeConfig& c,SyntheticSource s){switch(s){case SyntheticSource::Gap:return c.gapPass;case SyntheticSource::Layer:return c.layerPass;default:return c.overhangPass;}}
 bool shouldFocusKeyboard(const RuntimeConfig& c,PHLWINDOW w){return c.keyboardFocus!=0 && Desktop::focusState()->window()!=w;}

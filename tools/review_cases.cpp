@@ -64,9 +64,32 @@ static void stickySurfaceCase(EdgeHover& e) {
  target->m_isMapped=false;move(e);assert(!e.m_synthetic.active && !e.m_stickButtons);
  std::cout<<"review sticky: root and child grabs retain pressed surface and local coordinates; unmap clears PASS\n";
 }
+static void overlapCase(EdgeHover& e) {
+ reset(e);cfg.keyboardFocus=0;
+ auto bottom=addWindow(100,mon->m_activeWorkspace);
+ auto top=addWindow(100,mon->m_activeWorkspace);
+ move(e);assert(e.m_synthetic.target.lock()==top);
+ Desktop::viewState()->data.pop_back();move(e);assert(e.m_synthetic.target.lock()==bottom);
+ std::cout<<"review overlap: equal scores choose top; sole bottom control PASS\n";
+}
+static void occlusionCase(EdgeHover& e) {
+ reset(e);cfg.keyboardFocus=0;
+ auto bottom=addWindow(100,mon->m_activeWorkspace);
+ auto pinned=addWindow(100,mon->m_activeWorkspace);
+ // The compositor hit result also includes priorities not encoded by z order.
+ stockHit=[&](const Vector2D&){return pinned;};
+ assert(!e.deliverSyntheticMotion(bottom,{101,400},cfg,SyntheticSource::Gap));
+ assert(seat.motions==0);
+ assert(e.deliverSyntheticMotion(pinned,{101,400},cfg,SyntheticSource::Gap));
+ assert(seat.pointer==pinned->surf->data);
+ stockHit={};
+ std::cout<<"review occlusion: stock priority rejects obscured target and permits front target PASS\n";
+}
 static void reviewCases(EdgeHover& e,const std::string& name) {
  if(name=="all" || name=="confinement")confinementCase(e);
  if(name=="all" || name=="touch")touchCase(e);
  if(name=="all" || name=="capture")captureCase(e);
  if(name=="all" || name=="sticky")stickySurfaceCase(e);
+ if(name=="all" || name=="overlap")overlapCase(e);
+ if(name=="all" || name=="occlusion")occlusionCase(e);
 }
