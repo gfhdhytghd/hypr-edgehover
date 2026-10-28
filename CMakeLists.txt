@@ -17,8 +17,12 @@ add_compile_options(
   -Wno-missing-field-initializers
   -Wno-narrowing
   -Wno-pointer-arith
-  --no-gnu-unique
 )
+
+# GCC emits GNU_UNIQUE symbols unless disabled; Clang does not accept this flag.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  add_compile_options(-fno-gnu-unique)
+endif()
 
 if(CMAKE_EXPORT_COMPILE_COMMANDS)
   set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES
