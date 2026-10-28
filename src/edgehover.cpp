@@ -3,6 +3,7 @@
 #include "edgehover.hpp"
 
 #include "geometry.hpp"
+#include "plugin_config.hpp"
 #include <src/plugins/PluginSystem.hpp>
 #include <dlfcn.h>
 #include <wayland-server-core.h>
@@ -407,22 +408,22 @@ bool EdgeHover::initialize() {
 RuntimeConfig EdgeHover::readConfig() const {
     (void)m_handle;
 
-    static const auto PENABLED       = CConfigValue<Config::INTEGER>("plugin:hypr_edgehover:enabled");
-    static const auto PEDGES         = CConfigValue<std::string>("plugin:hypr_edgehover:edges");
-    static const auto PINSET         = CConfigValue<Config::INTEGER>("plugin:hypr_edgehover:inset");
-    static const auto PMAXDISTANCE   = CConfigValue<Config::INTEGER>("plugin:hypr_edgehover:max_distance");
-    static const auto PKEYBOARDFOCUS = CConfigValue<Config::INTEGER>("plugin:hypr_edgehover:keyboard_focus");
-    static const auto PGAPPASS       = CConfigValue<std::string>("plugin:hypr_edgehover:gap_pass");
-    static const auto PLAYERPASS     = CConfigValue<std::string>("plugin:hypr_edgehover:layer_pass");
-    static const auto PLAYERNAMES    = CConfigValue<std::string>("plugin:hypr_edgehover:layer_namespaces");
-    static const auto POVERHANGPASS  = CConfigValue<std::string>("plugin:hypr_edgehover:overhang_pass");
-    static const auto POVERHANGTHRESHOLD = CConfigValue<Config::INTEGER>("plugin:hypr_edgehover:overhang_threshold");
-    static const auto POVERHANGEDGEWIDTH = CConfigValue<Config::INTEGER>("plugin:hypr_edgehover:overhang_edge_width");
-    static const auto PSTEALEDGEWIDTH    = CConfigValue<Config::INTEGER>("plugin:hypr_edgehover:steal_edge_width");
-    static const auto PZONESTOP          = CConfigValue<std::string>("plugin:hypr_edgehover:zones_top");
-    static const auto PZONESBOTTOM       = CConfigValue<std::string>("plugin:hypr_edgehover:zones_bottom");
-    static const auto PZONESLEFT         = CConfigValue<std::string>("plugin:hypr_edgehover:zones_left");
-    static const auto PZONESRIGHT        = CConfigValue<std::string>("plugin:hypr_edgehover:zones_right");
+    static const auto PENABLED       = PluginConfigValue<Config::INTEGER>("plugin:hypr_edgehover:enabled");
+    static const auto PEDGES         = PluginConfigValue<std::string>("plugin:hypr_edgehover:edges");
+    static const auto PINSET         = PluginConfigValue<Config::INTEGER>("plugin:hypr_edgehover:inset");
+    static const auto PMAXDISTANCE   = PluginConfigValue<Config::INTEGER>("plugin:hypr_edgehover:max_distance");
+    static const auto PKEYBOARDFOCUS = PluginConfigValue<Config::INTEGER>("plugin:hypr_edgehover:keyboard_focus");
+    static const auto PGAPPASS       = PluginConfigValue<std::string>("plugin:hypr_edgehover:gap_pass");
+    static const auto PLAYERPASS     = PluginConfigValue<std::string>("plugin:hypr_edgehover:layer_pass");
+    static const auto PLAYERNAMES    = PluginConfigValue<std::string>("plugin:hypr_edgehover:layer_namespaces");
+    static const auto POVERHANGPASS  = PluginConfigValue<std::string>("plugin:hypr_edgehover:overhang_pass");
+    static const auto POVERHANGTHRESHOLD = PluginConfigValue<Config::INTEGER>("plugin:hypr_edgehover:overhang_threshold");
+    static const auto POVERHANGEDGEWIDTH = PluginConfigValue<Config::INTEGER>("plugin:hypr_edgehover:overhang_edge_width");
+    static const auto PSTEALEDGEWIDTH    = PluginConfigValue<Config::INTEGER>("plugin:hypr_edgehover:steal_edge_width");
+    static const auto PZONESTOP          = PluginConfigValue<std::string>("plugin:hypr_edgehover:zones_top");
+    static const auto PZONESBOTTOM       = PluginConfigValue<std::string>("plugin:hypr_edgehover:zones_bottom");
+    static const auto PZONESLEFT         = PluginConfigValue<std::string>("plugin:hypr_edgehover:zones_left");
+    static const auto PZONESRIGHT        = PluginConfigValue<std::string>("plugin:hypr_edgehover:zones_right");
     static const auto PFOLLOWMOUSE   = CConfigValue<Config::INTEGER>("input:follow_mouse");
 
     return {

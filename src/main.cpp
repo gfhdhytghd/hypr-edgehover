@@ -8,16 +8,20 @@
 #include <src/plugins/PluginAPI.hpp>
 
 #include "edgehover.hpp"
+#include "plugin_config.hpp"
 
 inline HANDLE                                  g_pluginHandle = nullptr;
 inline std::unique_ptr<hypr_edgehover::EdgeHover> g_edgeHover;
 
 namespace {
 
+hypr_edgehover::PluginConfig g_configValues;
+CHyprSignalListener g_configReloadListener;
+
 bool addConfigValue(SP<Config::Values::IValue> value) {
     const std::string name = value->name();
 
-    if (HyprlandAPI::addConfigValueV2(g_pluginHandle, value))
+    if (g_configValues.add(g_pluginHandle, value))
         return true;
 
     HyprlandAPI::addNotification(
@@ -29,11 +33,11 @@ bool addConfigValue(SP<Config::Values::IValue> value) {
 }
 
 bool addIntConfig(const char* name, Config::INTEGER fallback) {
-    return addConfigValue(makeShared<Config::Values::CIntValue>(name, "", fallback));
+    return addConfigValue(makeShared<hypr_edgehover::PluginValue<Config::Values::CIntValue>>(name, "", fallback));
 }
 
 bool addStringConfig(const char* name, Config::STRING fallback) {
-    return addConfigValue(makeShared<Config::Values::CStringValue>(name, "", fallback));
+    return addConfigValue(makeShared<hypr_edgehover::PluginValue<Config::Values::CStringValue>>(name, "", fallback));
 }
 
 // Reject a build whose headers do not match the running compositor. The hash is
@@ -79,6 +83,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 #undef STRING_CONF
 #undef INT_CONF
 
+    g_configReloadListener = Event::bus()->m_events.config.preReload.listen([] {
+        if (!g_configValues.restore())
+            HyprlandAPI::addNotification(g_pluginHandle, "[hypr-edgehover] failed to restore config values", CHyprColor(1.0, 0.2, 0.2, 1.0), 5000);
+    });
+
     g_edgeHover = std::make_unique<hypr_edgehover::EdgeHover>(g_pluginHandle);
     if (!g_edgeHover->initialize()) {
         HyprlandAPI::addNotification(g_pluginHandle, "[hypr-edgehover] failed to initialize input listener", CHyprColor(1.0, 0.2, 0.2, 1.0), 5000);
@@ -97,5 +106,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 }
 
 APICALL EXPORT void PLUGIN_EXIT() {
+    g_configReloadListener.reset();
     g_edgeHover.reset();
+    g_configValues.clear();
 }

@@ -59,6 +59,9 @@ if(BUILD_TESTING)
   add_test(NAME hypr-edgehover-input-regression
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/input_regression.py
       --build-dir ${CMAKE_CURRENT_BINARY_DIR}/input-regression --cxx ${CMAKE_CXX_COMPILER})
+  add_test(NAME hypr-edgehover-config-regression
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/config_regression.py
+      --build-dir ${CMAKE_CURRENT_BINARY_DIR}/config-regression --cxx ${CMAKE_CXX_COMPILER})
 endif()
 
 install(TARGETS hypr-edgehover LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
