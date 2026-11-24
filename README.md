@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/40aa2ccf-4c51-4f4d-948a-f94ff19ae562
 
 ## Configuration
 
-`main` targets the latest official Hyprland release (v0.57.0); `hyprland-master` targets Hyprland's development `main`. Lua configuration only. All options live under `plugin:hypr_edgehover:`.
+`main` targets the latest official Hyprland release (v0.57.2); `hyprland-master` targets Hyprland's development `main`. Lua configuration only. All options live under `plugin:hypr_edgehover:`.
 
 ```lua
 hl.config({
@@ -92,7 +92,7 @@ Hyprland installation cannot satisfy them accidentally.
 ## hyprpm
 
 ```sh
-hyprpm add https://github.com/gfhdhytghd/hypr-edgehover
+hyprpm add https://github.com/gfhdhytghd/hypr-edgehover v0.1.1-v0.57.2
 hyprpm enable hypr-edgehover
 hyprpm update
 ```
