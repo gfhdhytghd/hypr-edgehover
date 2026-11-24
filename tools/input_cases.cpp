@@ -45,6 +45,7 @@ static void stockButton(IPointer::SButtonEvent event) {
  // A slow click leaves keyboard focus synthetic after simulateMouseMovement.
  // Stock may refocus multiple times before finally delivering this button.
  if(event.state==WL_POINTER_BUTTON_STATE_PRESSED) {
+ input.held=allowClick;
  stockMove();stockMove();
  assert(seat.pointer==(allowClick?owner->m_synthetic.target.lock():native)->surf->data);
  }
@@ -64,8 +65,8 @@ static void buttonCases(EdgeHover& e) {
  assert(!e.m_buttonBypass&&!e.m_buttonBypassIdle);
  // The next physical motion can synthesize again: bypass cannot leak.
  move(e);assert(e.m_synthetic.active&&seat.pointer==target->surf->data);
- e.m_synthetic.source=SyntheticSource::Overhang;cfg.overhangPass.click=true;allowClick=true;
- input.held=true;stockButton({272,1});
+ allowClick=true;
+ stockButton({272,1});input.held=true;
  assert(e.m_stickButtons&&stockButtons==2&&!e.m_buttonBypass);
  stockButton({272,0});input.held=false;
  assert(!e.m_stickButtons&&stockButtons==3);
@@ -110,6 +111,40 @@ static void backendCases(EdgeHover& e) {
  modalBlocking=1;legacy->m_xdgSurface.reset();assert(!shadowedByModal(legacy));
  std::cout<<"backend: mapped/focus/layer gates, X11 buffer coordinates and legacy modal fallback PASS\n";
 }
+static void staleHoverCases(EdgeHover& e) {
+ // The stock move bus deduplicates against the last accepted position.
+ auto physicalMove = [&](double x) {
+  input.cursor = {x,400};
+  if (input.m_lastCursorPosFloored.x == x)
+   return;
+  Event::SCallbackInfo info;
+  e.handleMouseMove(input.cursor,info);
+  if (!info.cancelled) {
+   input.m_lastCursorPosFloored = input.cursor;
+   seat.setPointerFocus(nullptr,{});
+  }
+ };
+ reset(e);addWindow(100,mon->m_activeWorkspace);cfg.maxDistance=2;
+ physicalMove(3);physicalMove(1);assert(e.m_synthetic.active);
+ physicalMove(3);assert(!e.m_synthetic.active&&!seat.pointer);
+ for (bool button : {true,false}) {
+  physicalMove(1);assert(e.m_synthetic.active);
+  input.cursor={3,400}; // Change coordinates without a move event.
+  simulation=[&] {
+   Event::SCallbackInfo info;e.handleMouseMove(input.cursor,info);
+   assert(!info.cancelled);seat.setPointerFocus(nullptr,{});
+  };
+  Event::SCallbackInfo info;
+  if (button)
+   e.handleMouseButton({272,1},info);
+  else
+   e.handleMouseAxis({},info);
+  assert(!info.cancelled&&!e.m_stickButtons&&!e.m_synthetic.active&&!seat.pointer);
+  wl_event_loop_dispatch_idle(wl_display_get_event_loop(compositor.m_wlDisplay));
+ }
+ simulation={};
+ std::cout<<"stale hover: stock dedup and button/axis revalidation PASS\n";
+}
 static void reviewCases(EdgeHover& e, const std::string& name);
 int main(int argc, char** argv) {
  std::signal(SIGABRT, [](int){std::_Exit(86);});
@@ -147,6 +182,7 @@ int main(int argc, char** argv) {
  backendCases(e);
  fullscreenFocusCase(e);
  buttonCases(e);
+ staleHoverCases(e);
  reviewCases(e, "all");
  wl_display_destroy(compositor.m_wlDisplay);compositor.m_wlDisplay=nullptr;
 }

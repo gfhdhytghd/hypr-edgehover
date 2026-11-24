@@ -50,7 +50,7 @@ hl.config({
 - `overhang_pass` (`str`, default `"hover,keyboard"`): forwarded event classes when the stock hit is a thin overhanging window strip.
 - `overhang_threshold` (`int`, default `8`): visible goal thickness in pixels at or below which a window is considered an overhang. Thin windows are skipped as forwarding targets and do not block target selection behind them.
 - `overhang_edge_width` (`int`, default `0`): optional physical-edge limit for OVERHANG forwarding. `0` engages over the whole exposed overhang strip; values greater than `0` additionally require the pointer to be within that many pixels of the enabled monitor edge.
-- `steal_edge_width` (`int`, default `2`): physical monitor-edge strip width for LAYER forwarding. Layer surfaces only engage when the pointer is within this many pixels of the enabled edge.
+- `steal_edge_width` (`int`, default `2`): monitor-edge strip width for LAYER forwarding, in logical pixels. Layer surfaces only engage when the pointer is within this distance of the enabled edge.
 - `zones_top`, `zones_bottom`, `zones_left`, `zones_right` (`str`, default `"0-100"`): comma-separated percent ranges that enable forwarding on each edge. Horizontal edges run left to right; vertical edges run top to bottom. Invalid fragments are ignored, and an empty value matches nothing.
 
 Pass-set values are comma-separated subsets of `hover`, `click`, `scroll`, and `keyboard`. If `hover` is absent, that scenario is disabled entirely. `keyboard` also respects `keyboard_focus`; setting `keyboard` in a pass set does not override the `keyboard_focus` policy.
@@ -95,6 +95,14 @@ Hyprland installation cannot satisfy them accidentally.
 hyprpm add https://github.com/gfhdhytghd/hypr-edgehover
 hyprpm enable hypr-edgehover
 hyprpm update
+```
+
+On Hyprland's development `main`, select the plugin's development branch:
+
+```sh
+hyprpm add https://github.com/gfhdhytghd/hypr-edgehover origin/hyprland-master
+hyprpm enable hypr-edgehover
+hyprpm reload
 ```
 
 The configured hyprpm output is `build-cmake/libhypr-edgehover.so`, matching the CMake target output.

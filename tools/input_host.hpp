@@ -18,7 +18,7 @@
 #include "geometry.hpp"
 template<class T> using SP=std::shared_ptr<T>;
 template<class T> using WP=std::weak_ptr<T>;
-struct Vector2D { double x=0,y=0; Vector2D operator-(Vector2D p)const{return{x-p.x,y-p.y};} Vector2D operator*(double k)const{return{x*k,y*k};} };
+struct Vector2D { double x=0,y=0; Vector2D floor() const{return {std::floor(x),std::floor(y)};} Vector2D operator-(Vector2D p)const{return{x-p.x,y-p.y};} Vector2D operator*(double k)const{return{x*k,y*k};} };
 struct CBox { double x=0,y=0,width=0,height=0; };
 namespace Desktop::View { enum{GEOMETRIC_GOAL,GEOMETRIC_CURRENT}; struct IGeometric {enum{GEOMETRIC_GOAL,GEOMETRIC_CURRENT};}; }
 struct FakeWorkspace{};
@@ -66,7 +66,7 @@ struct ViewTracker{std::vector<PHLWINDOW> data;auto& windows(){return data;} Hit
 static ViewTracker* viewState(){static ViewTracker v;return &v;}}
 constexpr int BORDERICON_NONE=0;
 namespace Pointer::Cursor {constexpr int CURSOR_OVERRIDE_WINDOW_EDGE=1;struct Override {bool edge=false,other=false;void unsetOverride(int){edge=false;}};static auto overrideController=std::make_shared<Override>();}
-struct FakeInput {int m_borderIconDirection=BORDERICON_NONE;bool held=false,constrained=false;int simulations=0;std::vector<int> m_exclusiveKeyboardLSes; bool m_emptyFocusCursorSet=false,m_lastFocusOnLS=false,m_lastInputTouch=false,m_lastInputMouse=true;
+struct FakeInput {Vector2D cursor{1,400}, m_lastCursorPosFloored; Vector2D getMouseCoordsInternal(){return cursor;} int m_borderIconDirection=BORDERICON_NONE;bool held=false,constrained=false;int simulations=0;std::vector<int> m_exclusiveKeyboardLSes; bool m_emptyFocusCursorSet=false,m_lastFocusOnLS=false,m_lastInputTouch=false,m_lastInputMouse=true;
  struct Relay{bool popup=false;bool popupFromCoords(Vector2D){return popup;}}m_relay;
  bool hasHeldButtons(){return held;} bool isConstrained(){return constrained;} void simulateMouseMovement(){++simulations;if(simulation)simulation();}
 };

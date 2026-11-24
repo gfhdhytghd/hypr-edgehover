@@ -485,7 +485,7 @@ bool EdgeHover::bypassForCapture(Event::SCallbackInfo& info) {
     return true;
 }
 
-bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetPoint, const RuntimeConfig& config, SyntheticSource source) {
+bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetPoint, const RuntimeConfig& config, SyntheticSource source, bool validateOnly) {
     if (!window || !g_pCompositor || !g_pSeatManager || !g_pInputManager)
         return false;
 
@@ -543,6 +543,10 @@ bool EdgeHover::deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetP
     if (!surface)
         return false;
 
+    if (validateOnly)
+        return m_synthetic.source == source && m_synthetic.target.lock() == window &&
+            surface->m_mapped && m_synthetic.surface.lock() == surface && g_pSeatManager->m_state.pointerFocus.lock() == surface;
+
     g_pInputManager->m_borderIconDirection = BORDERICON_NONE;
     Pointer::Cursor::overrideController->unsetOverride(Pointer::Cursor::CURSOR_OVERRIDE_WINDOW_EDGE);
     g_pInputManager->m_emptyFocusCursorSet = false;
@@ -585,20 +589,31 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
     }
 
     const RuntimeConfig config = readConfig();
-    if (!config.enabled || info.cancelled) {
-        clearSynthetic();
+    if (!g_pInputManager || !g_pInputManager->hasHeldButtons())
+        clearStickButtons();
+
+    if (!config.enabled || info.cancelled || !resolveSyntheticMotion(coords, config, false)) {
+        if (m_stickButtons)
+            clearStickAndSynthetic();
+        else
+            clearSynthetic();
         return;
     }
 
+    // The cancelled stock path skips this assignment. Without it, a return
+    // to the last stock position can skip hit testing and leave our focus set.
+    g_pInputManager->m_lastCursorPosFloored = coords;
+    info.cancelled = true;
+}
+
+bool EdgeHover::resolveSyntheticMotion(const Vector2D& coords, const RuntimeConfig& config, bool validateOnly) {
     if (!g_pCompositor || !g_pSeatManager || !g_pInputManager || !g_pSessionLockManager || !g_layoutManager) {
-        clearSynthetic();
-        return;
+        return false;
     }
 
     const auto monitor = State::monitorState()->query().vec(coords).run();
     if (!monitor) {
-        clearSynthetic();
-        return;
+        return false;
     }
 
     const Rect   monitorRect = {.x = monitor->m_position.x, .y = monitor->m_position.y, .width = monitor->m_size.x, .height = monitor->m_size.y};
@@ -612,50 +627,30 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
     };
 
     const bool hasHeldButtons = g_pInputManager->hasHeldButtons();
-    if (!hasHeldButtons)
-        clearStickButtons();
 
     if (g_pSessionLockManager->isSessionLocked() || g_pInputManager->isConstrained() || g_pSeatManager->m_seatGrab || g_layoutManager->dragController()->target()) {
-        clearSynthetic();
-        return;
+        return false;
     }
 
     if (!g_pInputManager->m_exclusiveKeyboardLSes.empty() || (hasHeldButtons && !m_stickButtons) || focusedWindowConfinesPointer() || forcedFocusActive()) {
-        clearSynthetic();
-        return;
+        return false;
     }
 
     if (g_pInputManager->m_relay.popupFromCoords(coords)) {
-        clearSynthetic();
-        return;
+        return false;
     }
 
     if (currentWorkspaceHasFullscreen(monitor)) {
-        clearSynthetic();
-        return;
+        return false;
     }
 
     if (hasHeldButtons && m_stickButtons) {
         const auto pinnedWindow = m_synthetic.target.lock();
-        if (!pinnedWindow) {
-            clearStickAndSynthetic();
-            return;
-        }
+        const Rect pinnedBox = pinnedWindow ? boxToRect(pinnedWindow->getWindowMainSurfaceBox()) : Rect{};
+        if (pinnedBox.width <= 0.0 || pinnedBox.height <= 0.0)
+            return false;
 
-        const Rect pinnedBox = boxToRect(pinnedWindow->getWindowMainSurfaceBox());
-        if (pinnedBox.width <= 0.0 || pinnedBox.height <= 0.0) {
-            clearStickAndSynthetic();
-            return;
-        }
-
-        if (!deliverSyntheticMotion(pinnedWindow, pointToVector(clampPointToRectWithInset(cursorPoint, pinnedBox, config.inset)), config, m_synthetic.source)) {
-            clearStickAndSynthetic();
-            return;
-        }
-
-        // The stock path holds pointer focus while buttons are held; cancellation keeps the pinned target authoritative for this motion.
-        info.cancelled = true;
-        return;
+        return deliverSyntheticMotion(pinnedWindow, pointToVector(clampPointToRectWithInset(cursorPoint, pinnedBox, config.inset)), config, m_synthetic.source, validateOnly);
     }
 
     const auto hitUpperLayer = stockUpperLayerHit(coords, monitor);
@@ -676,8 +671,7 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
         const PassSet layerPass = passForSource(config, SyntheticSource::Layer);
         const auto    edgeHit   = nearestEnabledEdge(monitorRect, cursorPoint, geometryConfig);
         if (!layerPass.hover || !edgeHit || edgeHit->distance > config.stealEdgeWidth || !layerNamespaceMatches(config, hitLayer)) {
-            clearSynthetic();
-            return;
+            return false;
         }
 
         source                     = SyntheticSource::Layer;
@@ -686,21 +680,18 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
         const PassSet overhangPass = passForSource(config, SyntheticSource::Overhang);
         const auto    edgeHit      = nearestEnabledEdge(monitorRect, cursorPoint, geometryConfig);
         if (!overhangPass.hover || !edgeHit || (config.overhangEdgeWidth > 0.0 && edgeHit->distance > config.overhangEdgeWidth)) {
-            clearSynthetic();
-            return;
+            return false;
         }
 
         const Rect hitBox = boxToRect(goalBox(hitWindow));
         if (visibleThicknessForEdge(visibleThicknessInMonitor(monitorRect, hitBox), edgeHit->edge) > config.overhangThreshold) {
-            clearSynthetic();
-            return;
+            return false;
         }
 
         source                     = SyntheticSource::Overhang;
         geometryConfig.maxDistance = config.overhangEdgeWidth > 0.0 ? config.overhangEdgeWidth : 0.0;
     } else if (!passForSource(config, SyntheticSource::Gap).hover) {
-        clearSynthetic();
-        return;
+        return false;
     }
 
     std::vector<PHLWINDOW>         windows;
@@ -725,29 +716,31 @@ void EdgeHover::handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& in
 
     const auto picked = pickTarget(monitorRect, candidates, cursorPoint, geometryConfig);
     if (!picked || picked->windowIndex >= windows.size()) {
-        clearSynthetic();
-        return;
+        return false;
     }
 
     const auto window = windows[picked->windowIndex];
     if (!window) {
-        clearSynthetic();
-        return;
+        return false;
     }
 
     if (config.followMouse == 0 && config.keyboardFocus != 1 && Desktop::focusState() && window != Desktop::focusState()->window()) {
-        clearSynthetic();
-        return;
+        return false;
     }
 
-    const Vector2D targetPoint = pointToVector(picked->targetPoint);
-    if (!deliverSyntheticMotion(window, targetPoint, config, source)) {
-        clearSynthetic();
-        return;
-    }
+    return deliverSyntheticMotion(window, pointToVector(picked->targetPoint), config, source, validateOnly);
+}
 
-    // The stock path would clear pointer focus in gaps; cancellation keeps this synthetic delivery authoritative for this motion.
-    info.cancelled = true;
+bool EdgeHover::syntheticInputEligible(const RuntimeConfig& config) {
+    return g_pInputManager && !m_buttonBypass &&
+        resolveSyntheticMotion(g_pInputManager->getMouseCoordsInternal().floor(), config, true);
+}
+
+void EdgeHover::restoreStockMotion() {
+    // simulateMouseMovement subtracts (1,1) from the cached position. Start
+    // from the real position so that subtraction always forces a new hit test.
+    g_pInputManager->m_lastCursorPosFloored = g_pInputManager->getMouseCoordsInternal().floor();
+    g_pInputManager->simulateMouseMovement();
 }
 
 void EdgeHover::handleMouseButton(const IPointer::SButtonEvent& event, Event::SCallbackInfo& info) {
@@ -776,16 +769,8 @@ void EdgeHover::handleMouseButton(const IPointer::SButtonEvent& event, Event::SC
         return;
 
     const RuntimeConfig config = readConfig();
-    if (config.enabled && passForSource(config, m_synthetic.source).click) {
-        const auto pinnedWindow = m_synthetic.target.lock();
-        const auto pinnedSurface = m_synthetic.surface.lock();
-        if (!pinnedWindow || !pinnedSurface || !pinnedSurface->m_mapped || !g_pSeatManager || g_pSeatManager->m_state.pointerFocus.lock() != pinnedSurface) {
-            clearStickAndSynthetic();
-            return;
-        }
-
+    if (config.enabled && passForSource(config, m_synthetic.source).click && syntheticInputEligible(config)) {
         m_stickButtons = true;
-        m_synthetic.target = pinnedWindow;
         m_stickyButtonCodes.insert(event.button);
         return;
     }
@@ -811,7 +796,7 @@ void EdgeHover::handleMouseButton(const IPointer::SButtonEvent& event, Event::SC
             return;
         }
         m_buttonBypass = true;
-        g_pInputManager->simulateMouseMovement();
+        restoreStockMotion();
     }
 }
 
@@ -825,13 +810,13 @@ void EdgeHover::handleMouseAxis(const IPointer::SAxisEvent& event, Event::SCallb
         return;
 
     const RuntimeConfig config = readConfig();
-    if (config.enabled && passForSource(config, m_synthetic.source).scroll)
+    if (config.enabled && passForSource(config, m_synthetic.source).scroll && syntheticInputEligible(config))
         return;
 
     clearSynthetic();
     if (g_pInputManager) {
         m_bypassNext = true;
-        g_pInputManager->simulateMouseMovement();
+        restoreStockMotion();
     }
 }
 
