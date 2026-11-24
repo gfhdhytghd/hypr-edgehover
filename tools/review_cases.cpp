@@ -55,7 +55,8 @@ static void stickySurfaceCase(EdgeHover& e) {
  // Unmapping the fixed surface must relinquish the synthetic grab.
  rootSurface->m_mapped=false;move(e);assert(!e.m_stickButtons && !e.m_synthetic.active);
  rootSurface->m_mapped=true;input.held=false;seat.pressed=false;
- Event::SCallbackInfo hover;e.handleMouseMove({1,500},hover);
+ input.cursor={1,500};
+ Event::SCallbackInfo hover;e.handleMouseMove(input.cursor,hover);
  assert(hover.cancelled && seat.pointer==target->child);
  Event::SCallbackInfo childPress;e.handleMouseButton({272,1},childPress);input.held=true;seat.pressed=true;
  Event::SCallbackInfo childMotion;e.handleMouseMove({1,400},childMotion);

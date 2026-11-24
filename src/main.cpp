@@ -101,7 +101,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         .name = "hypr-edgehover",
         .description = "Forward edge-gap pointer motion to adjacent windows",
         .author = "wilf",
-        .version = "0.1.0",
+        .version = "0.1.1",
     };
 }
 

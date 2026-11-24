@@ -1,7 +1,7 @@
 #pragma once
 
 // The pinned fork has no public accessors for the current dispatch source or
-// border cursor cache. Preinclude InputManager's dependencies so the access
+// border cursor cache or motion deduplication state. Preinclude InputManager's dependencies so the access
 // override is confined to that class. PLUGIN_INIT checks the exact fork ABI.
 #include <src/defines.hpp>
 #include <list>

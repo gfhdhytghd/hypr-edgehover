@@ -82,7 +82,10 @@ class EdgeHover {
     void          handleMouseMove(const Vector2D& coords, Event::SCallbackInfo& info);
     void          handleMouseButton(const IPointer::SButtonEvent& event, Event::SCallbackInfo& info);
     void          handleMouseAxis(const IPointer::SAxisEvent& event, Event::SCallbackInfo& info);
-    bool          deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetPoint, const RuntimeConfig& config, SyntheticSource source);
+    bool          resolveSyntheticMotion(const Vector2D& coords, const RuntimeConfig& config, bool validateOnly);
+    bool          syntheticInputEligible(const RuntimeConfig& config);
+    void          restoreStockMotion();
+    bool          deliverSyntheticMotion(PHLWINDOW window, const Vector2D& targetPoint, const RuntimeConfig& config, SyntheticSource source, bool validateOnly = false);
     void          clearSynthetic();
     void          clearStickButtons();
     void          clearStickAndSynthetic();
